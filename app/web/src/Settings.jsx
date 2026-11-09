@@ -30,10 +30,13 @@ export default function Settings({ onClose, onTrama, onSaved }) {
 
   useEffect(() => { cargar(); }, []);
 
+  // Auto-foco SOLO al abrir el formulario. Con [form] como dependencia el efecto
+  // se re-ejecutaba en cada tecla y devolvía el cursor al primer campo.
   useEffect(() => {
     if (!form) return;
-    document.getElementById('form-first')?.focus();
-  }, [form]);
+    const t = setTimeout(() => document.getElementById('form-first')?.focus(), 30);
+    return () => clearTimeout(t);
+  }, [form?.tipo, form?.item?.id]);
 
   function abrir(tipo, item) {
     const base = item
@@ -251,7 +254,13 @@ export default function Settings({ onClose, onTrama, onSaved }) {
       {/* -------- formularios -------- */}
       {form && (
         <div className="form-layer">
-          <div className="form-card">
+          <div className="form-card"
+               onKeyDown={(e) => {
+                 if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') {
+                   e.preventDefault();
+                   guardar();
+                 }
+               }}>
             <div className="form-head">
               <h3>
                 {form.tipo === 'linea' ? 'Línea' : form.tipo === 'maquina' ? 'Equipo' : 'Receta'}
