@@ -383,32 +383,53 @@ export default function App() {
 
       <div className="layout">
         <aside className="side">
-          <div className="side-h">Líneas</div>
+          <div className="side-h">Líneas de planta</div>
           <button className={`line-item ${sel === 'todas' ? 'on' : ''}`} onClick={() => setSel('todas')}>
-            <span className="ldot" />
-            <span className="lname">Todas las máquinas</span>
-            <small>{maqs.length}</small>
+            <span className="line-badge">
+              <svg viewBox="0 0 24 24">
+                <rect x="3" y="3" width="7.5" height="7.5" rx="1.6" />
+                <rect x="13.5" y="3" width="7.5" height="7.5" rx="1.6" />
+                <rect x="3" y="13.5" width="7.5" height="7.5" rx="1.6" />
+                <rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.6" />
+              </svg>
+            </span>
+            <span className="lname">
+              <b>Todas las máquinas</b>
+              <small>{maqs.length} en planta</small>
+            </span>
+            <span className={`pill ${totalDetenidas ? 'detenida' : ''}`}>
+              {totalDetenidas ? `${totalDetenidas} parada${totalDetenidas === 1 ? '' : 's'}` : 'OK'}
+            </span>
           </button>
 
           {lineas.map(l => {
             const st = estadoLinea(l);
             return (
-              <button key={l.linea_id} className={`line-item ${sel === l.linea_id ? 'on' : ''} ${st.estado}`}
+              <button key={l.linea_id} className={`line-item ${sel === l.linea_id ? 'on' : ''}`}
                       onClick={() => setSel(l.linea_id)}>
-                <span className={`ldot ${st.estado}`} />
+                <span className="line-badge">{l.codigo}</span>
                 <span className="lname">
-                  <b>{l.codigo}</b> {l.nombre}
+                  <b>{l.nombre}</b>
                   <small>
                     {l.maquinas} máquinas
-                    {st.estado !== 'operando' && ` · ${st.estado === 'detenida' ? 'parada total' : 'parada parcial'} · ${st.causa}`}
+                    {st.estado === 'operando' ? ' · operando' : ` · ${st.causa}`}
                   </small>
+                </span>
+                <span className={`pill ${st.estado}`}>
+                  {st.estado === 'operando' ? 'OK' : st.estado === 'detenida' ? 'PARADA' : 'PARCIAL'}
                 </span>
               </button>
             );
           })}
 
           {lineaActual && (
-            <button className="btn-edit" onClick={abrirEditor}>Editar trama</button>
+            <button className="btn-edit" onClick={abrirEditor}>
+              <svg viewBox="0 0 24 24">
+                <path d="M4 20h4.5L19 9.5 14.5 5 4 15.5V20Z" />
+                <path d="m13.5 6 4.5 4.5" />
+              </svg>
+              Editar trama
+            </button>
           )}
 
           <div className="side-foot">

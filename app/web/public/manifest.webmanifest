@@ -4,9 +4,14 @@
   "start_url": "/",
   "display": "fullscreen",
   "orientation": "landscape",
-  "background_color": "#080B0F",
-  "theme_color": "#080B0F",
+  "background_color": "#EDF1F5",
+  "theme_color": "#FFFFFF",
   "icons": [
-    { "src": "/icono.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+    {
+      "src": "/icono.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
   ]
 }
