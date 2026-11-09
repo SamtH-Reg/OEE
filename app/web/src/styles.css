@@ -444,3 +444,5 @@ header{
   .tabs{order:3;width:100%;overflow-x:auto}
   .set-row{flex-wrap:wrap}
 }
+
+.opt{font-size:11px;letter-spacing:.6px;color:var(--dim);font-weight:600;text-transform:none}

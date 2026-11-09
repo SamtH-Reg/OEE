@@ -272,10 +272,11 @@ export default function Settings({ onClose, onTrama, onSaved }) {
             <div className="form-grid">
               {form.tipo === 'linea' && (
                 <>
-                  <label>Código<input id="form-first" value={form.valores.codigo}
-                    onChange={e => set('codigo', e.target.value)} placeholder="L4" /></label>
-                  <label>Nombre<input value={form.valores.nombre}
+                  <label>Nombre<input id="form-first" value={form.valores.nombre}
                     onChange={e => set('nombre', e.target.value)} placeholder="Línea 4 · Jibia" /></label>
+                  <label>Código <span className="opt">opcional · se genera solo</span>
+                    <input value={form.valores.codigo}
+                      onChange={e => set('codigo', e.target.value)} placeholder="automático" /></label>
                   <label className="wide">Descripción<input value={form.valores.descripcion || ''}
                     onChange={e => set('descripcion', e.target.value)} placeholder="Recepción → cocido → empaque" /></label>
                   <label className="check"><input type="checkbox" checked={!!form.valores.activa}
@@ -290,16 +291,18 @@ export default function Settings({ onClose, onTrama, onSaved }) {
                     <option value="">Elegir…</option>
                     {data.areas.map(a => <option key={a.id} value={a.id}>{a.nombre}</option>)}
                   </select></label>
-                  <label>Código<input value={form.valores.codigo}
-                    onChange={e => set('codigo', e.target.value)} placeholder="CIN-03" /></label>
                   <label>Nombre<input value={form.valores.nombre}
                     onChange={e => set('nombre', e.target.value)} placeholder="Cinta Transportadora 3" /></label>
-                  <label>Nombre corto<input value={form.valores.nombre_corto || ''}
-                    onChange={e => set('nombre_corto', e.target.value)} placeholder="Cinta 3" /></label>
+                  <label>Nombre corto <span className="opt">el de la tarjeta</span>
+                    <input value={form.valores.nombre_corto || ''}
+                      onChange={e => set('nombre_corto', e.target.value)} placeholder="Cinta 3" /></label>
                   <label>Criticidad<select value={form.valores.criticidad}
                     onChange={e => set('criticidad', Number(e.target.value))}>
                     <option value={1}>1 · alta</option><option value={2}>2 · media</option><option value={3}>3 · baja</option>
                   </select></label>
+                  <label>Código <span className="opt">opcional · se genera solo</span>
+                    <input value={form.valores.codigo}
+                      onChange={e => set('codigo', e.target.value)} placeholder="automático" /></label>
                   <label className="check"><input type="checkbox" checked={!!form.valores.activa}
                     onChange={e => set('activa', e.target.checked)} /> Activa</label>
                 </>

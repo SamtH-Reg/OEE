@@ -292,17 +292,35 @@ app.get('/api/settings', async () => {
 const texto = (v, max = 120) => (v == null ? null : String(v).trim().slice(0, max));
 const codigo = (v) => texto(v, 24)?.toUpperCase();
 
+// El código es interno: si no lo escriben, se arma desde el nombre.
+const slug = (t) => String(t || '')
+  .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+  .slice(0, 18) || 'EQ';
+
+async function codigoUnico(tabla, base) {
+  let code = base, n = 1;
+  while (n < 100) {
+    const r = await q(`select 1 from ${tabla} where codigo = $1`, [code]);
+    if (!r.rowCount) return code;
+    n += 1;
+    code = `${base}-${n}`.slice(0, 24);
+  }
+  return `${base}-${Date.now().toString().slice(-4)}`;
+}
+
 app.post('/api/lineas', async (req, reply) => {
   const b = req.body || {};
-  if (!codigo(b.codigo) || !texto(b.nombre)) {
-    return reply.code(400).send({ error: 'código y nombre son obligatorios' });
+  if (!texto(b.nombre)) {
+    return reply.code(400).send({ error: 'el nombre es obligatorio' });
   }
   try {
+    const code = codigo(b.codigo) || await codigoUnico('lineas', slug(b.nombre));
     const r = await q(
       `insert into lineas (codigo, nombre, descripcion, orden)
        values ($1, $2, $3, coalesce($4, (select coalesce(max(orden), 0) + 1 from lineas)))
        returning *`,
-      [codigo(b.codigo), texto(b.nombre), texto(b.descripcion, 240), b.orden ?? null]);
+      [code, texto(b.nombre), texto(b.descripcion, 240), b.orden ?? null]);
     return r.rows[0];
   } catch (e) {
     return reply.code(400).send({ error: e.code === '23505' ? 'ya existe una línea con ese código' : e.message });
@@ -319,7 +337,7 @@ app.put('/api/lineas/:id', async (req, reply) => {
                          activa = coalesce($5, activa),
                          orden = coalesce($6, orden)
         where id = $1 returning *`,
-      [req.params.id, codigo(b.codigo), texto(b.nombre), texto(b.descripcion, 240),
+      [req.params.id, codigo(b.codigo) || null, texto(b.nombre), texto(b.descripcion, 240),
        b.activa ?? null, b.orden ?? null]);
     if (!r.rowCount) return reply.code(404).send({ error: 'línea no existe' });
     return r.rows[0];
@@ -330,17 +348,18 @@ app.put('/api/lineas/:id', async (req, reply) => {
 
 app.post('/api/maquinas', async (req, reply) => {
   const b = req.body || {};
-  if (!b.area_id || !codigo(b.codigo) || !texto(b.nombre)) {
-    return reply.code(400).send({ error: 'área, código y nombre son obligatorios' });
+  if (!b.area_id || !texto(b.nombre)) {
+    return reply.code(400).send({ error: 'área y nombre son obligatorios' });
   }
   try {
+    const code = codigo(b.codigo) || await codigoUnico('maquinas', slug(b.nombre_corto || b.nombre));
     const r = await q(
       `insert into maquinas (area_id, codigo, nombre, nombre_corto, criticidad, orden, activa)
        values ($1, $2, $3, $4, coalesce($5, 2),
                coalesce($6, (select coalesce(max(orden), 0) + 1 from maquinas where area_id = $1)),
                coalesce($7, true))
        returning *`,
-      [b.area_id, codigo(b.codigo), texto(b.nombre), texto(b.nombre_corto, 40) || texto(b.nombre, 20),
+      [b.area_id, code, texto(b.nombre), texto(b.nombre_corto, 40) || texto(b.nombre, 20),
        b.criticidad ?? 2, b.orden ?? 0, b.activa ?? true]);
     return r.rows[0];
   } catch (e) {
@@ -359,7 +378,7 @@ app.put('/api/maquinas/:id', async (req, reply) => {
                            criticidad = coalesce($6, criticidad),
                            activa = coalesce($7, activa)
         where id = $1 returning *`,
-      [req.params.id, b.area_id ?? null, codigo(b.codigo), texto(b.nombre), texto(b.nombre_corto, 40),
+      [req.params.id, b.area_id ?? null, codigo(b.codigo) || null, texto(b.nombre), texto(b.nombre_corto, 40),
        b.criticidad ?? null, b.activa ?? null]);
     if (!r.rowCount) return reply.code(404).send({ error: 'máquina no existe' });
     return r.rows[0];
