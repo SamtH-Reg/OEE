@@ -11,7 +11,7 @@ para planta de procesamiento pesquero.
 
 | Archivo | Qué es |
 |---|---|
-| `propuesta-paradas-planta.html` | Documento técnico completo (modelo, arquitectura, offline, UX, Pareto, hardware, plan). Se abre con doble clic. |
+| `documentacion-paradas-planta.html` | Documentación técnica del sistema (modelo, arquitectura, offline, UX, Pareto, hardware, plan). Se abre con doble clic. |
 | `mockup-tablet.html` | Prototipo navegable del tablero: toca una máquina → causa, y una máquina roja → reanudar. |
 | `app/` | **Aplicación real**: PWA (React + Vite + Dexie) y API (Fastify) contra la base de Neon. |
 | `sql/esquema_paradas.sql` | Esquema completo: tablas, restricciones, índices, vistas, funciones y triggers. |
