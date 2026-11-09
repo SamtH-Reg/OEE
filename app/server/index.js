@@ -61,19 +61,94 @@ app.get('/api/catalogo', async () => {
   };
 });
 
+// ---------------- líneas y tramas ----------------
+app.get('/api/lineas', async () => {
+  const [lineas, trama] = await Promise.all([
+    q('select * from v_linea_estado'),
+    q(`select lm.linea_id, lm.posicion, lm.detiene_linea,
+              m.id as maquina_id, m.codigo, m.nombre, m.nombre_corto, m.criticidad,
+              a.nombre as area
+         from linea_maquinas lm
+         join maquinas m on m.id = lm.maquina_id
+         join areas a on a.id = m.area_id
+        order by lm.linea_id, lm.posicion`)
+  ]);
+  return { lineas: lineas.rows, trama: trama.rows };
+});
+
+// Reemplaza la trama completa de una línea (orden + cuello de botella).
+app.put('/api/lineas/:id/trama', async (req, reply) => {
+  const lineaId = Number(req.params.id);
+  const maquinas = (req.body && req.body.maquinas) || [];
+
+  if (!Number.isInteger(lineaId)) return reply.code(400).send({ error: 'línea inválida' });
+  if (!Array.isArray(maquinas) || maquinas.length === 0) {
+    return reply.code(400).send({ error: 'la trama no puede quedar vacía' });
+  }
+  if (maquinas.filter(m => m.detiene_linea).length > 1) {
+    return reply.code(400).send({ error: 'solo puede haber un cuello de botella por línea' });
+  }
+  const ids = new Set(maquinas.map(m => Number(m.maquina_id)));
+  if (ids.size !== maquinas.length) {
+    return reply.code(400).send({ error: 'hay máquinas repetidas en la trama' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('begin');
+    await client.query('delete from linea_maquinas where linea_id = $1', [lineaId]);
+    for (let i = 0; i < maquinas.length; i++) {
+      await client.query(
+        `insert into linea_maquinas (linea_id, maquina_id, posicion, detiene_linea)
+         values ($1, $2, $3, $4)`,
+        [lineaId, maquinas[i].maquina_id, i + 1, Boolean(maquinas[i].detiene_linea)]
+      );
+    }
+    await client.query('commit');
+  } catch (e) {
+    await client.query('rollback');
+    return reply.code(400).send({ error: e.message });
+  } finally {
+    client.release();
+  }
+  return { ok: true, linea_id: lineaId, maquinas: maquinas.length };
+});
+
 // ---------------- tablero ----------------
+// Devuelve cada máquina con su línea/posición, su parada propia (si es el
+// origen) y la parada que la afecta por propagación (si viene de otra máquina).
 app.get('/api/tablero', async () => {
   const r = await q(`
-    select m.id, m.codigo, m.nombre, m.nombre_corto, m.area_id, a.nombre as area,
+    with primaria as (
+      select distinct on (maquina_id) maquina_id, linea_id, posicion, detiene_linea
+        from linea_maquinas
+       order by maquina_id, linea_id
+    )
+    select m.id, m.codigo, m.nombre, m.nombre_corto, m.area_id,
+           a.nombre as area, a.orden as area_orden,
+           pr.linea_id, pr.posicion, pr.detiene_linea,
            p.uuid_cliente, p.causa, p.categoria, p.es_planificada,
-           p.hora_inicio, p.duracion_minutos, p.impacto
+           p.hora_inicio, p.duracion_minutos, p.impacto, p.alcance,
+           af.parada_uuid as af_uuid, af.causa as af_causa,
+           (select mm.nombre_corto from maquinas mm where mm.id = af.origen_id) as af_origen,
+           af.alcance as af_alcance,
+           af.hora_inicio as af_inicio, af.duracion_minutos as af_duracion
       from maquinas m
       join areas a on a.id = m.area_id
+      left join primaria pr on pr.maquina_id = m.id
       left join v_paradas p
              on p.maquina_id = m.id and p.estado = 'activa'
+      left join lateral (
+           select v.* from v_maquinas_afectadas v
+            where v.maquina_id = m.id and v.afectada
+            order by v.hora_inicio
+            limit 1
+      ) af on true
      where m.activa
-     order by a.orden, m.orden`);
-  return { maquinas: r.rows, ahora: new Date().toISOString() };
+     order by a.orden, pr.posicion nulls last, m.orden`);
+
+  const lineas = await q('select * from v_linea_estado');
+  return { maquinas: r.rows, lineas: lineas.rows, ahora: new Date().toISOString() };
 });
 
 // ---------------- abrir parada ----------------
@@ -87,9 +162,20 @@ app.post('/api/paradas', async (req, reply) => {
     await q('select fn_asegurar_turno($1)', [b.hora_inicio || new Date().toISOString()]);
     const r = await q(
       `select * from fn_abrir_parada(
-         $1::int, $2::int, $3::timestamptz, $4::uuid, $5::text, $6::numeric, $7::text, null, $8::text, $9::text)`,
-      [b.maquina_id, b.causa_id, b.hora_inicio, b.uuid, b.impacto || 'Total',
-       b.porcentaje_afectacion ?? null, b.comentario ?? null, b.dispositivo_id ?? null, b.usuario ?? 'tablet']
+         p_maquina_id      => $1::int,
+         p_codigo_causa_id => $2::int,
+         p_hora_inicio     => $3::timestamptz,
+         p_uuid_cliente    => $4::uuid,
+         p_impacto         => $5::text,
+         p_pct_afectacion  => $6::numeric,
+         p_comentario      => $7::text,
+         p_dispositivo_id  => $8::text,
+         p_usuario         => $9::text,
+         p_linea_id        => $10::int,
+         p_alcance         => $11::text)`,
+      [b.maquina_id, b.causa_id, b.hora_inicio || new Date().toISOString(), b.uuid,
+       b.impacto || 'Total', b.porcentaje_afectacion ?? null, b.comentario ?? null,
+       b.dispositivo_id ?? null, b.usuario ?? 'tablet', b.linea_id ?? null, b.alcance ?? null]
     );
     return r.rows[0];
   } catch (e) {

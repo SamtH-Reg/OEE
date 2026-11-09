@@ -147,6 +147,34 @@ async function debeFallar(c, nombre, sql, esperado) {
     return '60 min + 40 min';
   });
 
+  console.log('== Líneas y propagación');
+  await ok(c, 'parada en el cuello detiene la línea completa', async () => {
+    // se parte de una planta sin paradas abiertas
+    await c.query(`update registro_paradas set estado='cerrada', hora_fin=now() where estado='activa'`);
+    await c.query(`select fn_abrir_parada(p_maquina_id => 4, p_codigo_causa_id => 1, p_hora_inicio => now())`);
+    const r = await c.query(`select count(*)::int n from v_maquinas_afectadas where afectada`);
+    if (r.rows[0].n !== 5) throw new Error('máquinas afectadas=' + r.rows[0].n);
+    const l = await c.query(`select estado from v_linea_estado where codigo = 'L1'`);
+    if (l.rows[0].estado !== 'detenida') throw new Error('estado=' + l.rows[0].estado);
+    return '5 máquinas · línea detenida';
+  });
+  await ok(c, 'parada fuera del cuello solo detiene aguas abajo', async () => {
+    await c.query(`update registro_paradas set estado='cerrada', hora_fin=now() where estado='activa'`);
+    await c.query(`select fn_abrir_parada(p_maquina_id => 5, p_codigo_causa_id => 1, p_hora_inicio => now())`);
+    const r = await c.query(`select count(*)::int n from v_maquinas_afectadas where afectada`);
+    if (r.rows[0].n !== 2) throw new Error('máquinas afectadas=' + r.rows[0].n);
+    const l = await c.query(`select estado from v_linea_estado where codigo = 'L1'`);
+    if (l.rows[0].estado !== 'parcial') throw new Error('estado=' + l.rows[0].estado);
+    return '2 máquinas · línea parcial';
+  });
+  await ok(c, 'la trama admite máquinas distintas por línea', async () => {
+    const r = await c.query(`select l.codigo, count(*)::int n
+                               from linea_maquinas lm join lineas l on l.id = lm.linea_id
+                              group by 1 order by 1`);
+    if (r.rows.length !== 3) throw new Error('líneas=' + r.rows.length);
+    return r.rows.map(x => x.codigo + ':' + x.n).join(' ');
+  });
+
   console.log('== Auditoría y métricas');
   await ok(c, 'edición de supervisor queda auditada con usuario y campos', async () => {
     await c.query(`set local app.usuario = 'supervisor.turno'`);

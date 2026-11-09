@@ -16,6 +16,15 @@ export async function leerCatalogo() {
   return db.catalogo.get('actual');
 }
 
+// Último tablero y tramas vistos con red: permite abrir la app sin conexión.
+export async function guardarTablero(t) {
+  await db.catalogo.put({ id: 'tablero', ts: Date.now(), ...t });
+}
+
+export async function leerTablero() {
+  return db.catalogo.get('tablero');
+}
+
 export async function guardarMaquinas(lista) {
   await db.maquinas.bulkPut(lista);
 }

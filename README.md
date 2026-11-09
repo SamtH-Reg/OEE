@@ -17,9 +17,12 @@ para planta de procesamiento pesquero.
 | `sql/esquema_paradas.sql` | Esquema completo: tablas, restricciones, índices, vistas, funciones y triggers. |
 | `sql/002_turno_auto.sql` | Crea el turno del día si nadie lo creó (el operador nunca ve «no existe turno»). |
 | `sql/003_borrado_seguro.sql` | Corrige la auditoría de DELETE y bloquea el borrado de paradas. |
+| `sql/004_lineas.sql` | Líneas, tramas (secuencia de máquinas) y propagación de la parada. |
+| `sql/005_semilla_lineas.sql` | Tres líneas de demostración con su cuello de botella. |
+| `sql/006_tramas_sin_solape.sql` | Corrige tramas que compartían máquinas entre líneas. |
 | `sql/semilla_demo.sql` | Datos de demostración (171 paradas, 13 máquinas, 4 áreas, 28 turnos). |
 | `sql/reset_demo.sql` | Deja la base vacía (borra todo el esquema). |
-| `pruebas/pruebas.js` | 17 pruebas de integridad, flujo de 2 clics, sincronización offline y borrado. |
+| `pruebas/pruebas.js` | 20 pruebas: integridad, 2 clics, offline, borrado y propagación por línea. |
 
 ## Estado
 
@@ -54,6 +57,29 @@ para las migraciones).
 3. **`es_planificada` en el catálogo de causas** — sin esto el Pareto acusa a Operaciones de tiempo planificado.
 4. **Duración calculada en vista, no almacenada** — una corrección de horas se refleja al instante.
 5. **Nada se borra** — anulación con motivo + auditoría con diff de campos.
+
+## Líneas de producción y propagación
+
+![Vista de línea](captura-linea.png)
+
+La planta trabaja en flujo continuo, así que cada máquina vive en una **trama** (secuencia
+ordenada dentro de una línea). Una parada se propaga según el criterio configurado:
+
+| Rol de la máquina en la trama | Alcance de la parada | Qué se detiene |
+|---|---|---|
+| `detiene_linea = true` (cuello de botella) | `linea` | La línea completa, aguas arriba y aguas abajo |
+| `detiene_linea = false` | `aguas_abajo` | Solo las máquinas siguientes en la secuencia |
+| Máquina fuera de toda línea | `maquina` | Solo ella |
+
+- El criterio se guarda en `linea_maquinas.detiene_linea`, **no** se pregunta al operador: se mantienen los 2 toques.
+- Cada línea tiene su trama y sus máquinas: no todas las líneas comparten el mismo equipamiento.
+- El panel lateral muestra las líneas con su estado (`operando` / `parada parcial` / `parada total`),
+  la causa y la máquina de origen.
+- **Editar trama** permite agregar, quitar y reordenar máquinas y marcar el cuello de botella
+  (solo uno por línea). Se guarda con `PUT /api/lineas/:id/trama`.
+- Una parada se registra **una sola vez**: las máquinas arrastradas se marcan como afectadas
+  (`v_maquinas_afectadas`), no se duplican registros. Para minutos-máquina existe
+  `v_paradas_efectivas`; el Pareto sigue contando el evento una vez.
 
 ## App funcional
 

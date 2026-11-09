@@ -389,14 +389,51 @@
     )
 );</pre>
 
-      <p class="small">El script completo (691 líneas, comentado, con vistas, funciones y triggers) está en
-        <code>sql/esquema_paradas.sql</code>. Se ejecuta una vez y no requiere pasos manuales.</p>
+      <p class="small">El script base (691 líneas, comentado, con vistas, funciones y triggers) está en
+        <code>sql/esquema_paradas.sql</code>, más las migraciones <code>002</code> a <code>006</code>
+        (turno automático, borrado seguro y líneas).</p>
 
       <h3>Por qué las duraciones no se guardan como columna</h3>
       <p>La duración se calcula en la vista <code>v_paradas</code>:
         <code>extract(epoch from (coalesce(hora_fin, now()) - hora_inicio))/60</code>.
         Guardarla sería un dato derivado que se desincroniza en cuanto un supervisor corrige una hora.
         Así, una parada en curso siempre muestra sus minutos reales y una corrección se refleja al instante.</p>
+
+      <h3>Líneas, tramas y propagación <span class="tag">el flujo real de la planta</span></h3>
+      <p>La planta no es un conjunto de máquinas sueltas: es un flujo. Cada línea tiene su <strong>trama</strong>
+        (una secuencia ordenada de máquinas) y no todas las líneas usan el mismo equipamiento. Cuando una
+        máquina se detiene, la parada se propaga según el rol que esa máquina tiene en la trama:</p>
+
+      <table>
+        <thead><tr><th style="width:30%">Rol en la trama</th><th style="width:18%">Alcance</th><th>Qué se detiene</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Cuello de botella</strong> (<code>detiene_linea</code>)</td><td><code>linea</code></td>
+              <td>Toda la línea: aguas arriba se acumula producto, aguas abajo falta material.</td></tr>
+          <tr><td>Máquina intermedia</td><td><code>aguas_abajo</code></td>
+              <td>Solo las máquinas que vienen después en la secuencia; las de atrás siguen con buffer.</td></tr>
+          <tr><td>Máquina fuera de línea (servicios)</td><td><code>maquina</code></td>
+              <td>Nada más que ella.</td></tr>
+        </tbody>
+      </table>
+
+      <p>El criterio vive en la trama y no en la cabeza del operador: al tocar la causa, el sistema ya sabe
+        si corresponde detener la línea completa. Se mantienen los 2 toques y el criterio queda igual para
+        todos los turnos. La parada se guarda <strong>una sola vez</strong>: las máquinas arrastradas se
+        calculan en <code>v_maquinas_afectadas</code>, no se duplican registros (si no, el Pareto contaría
+        el mismo evento cinco veces).</p>
+
+<pre><span class="kw">create table</span> linea_maquinas (
+    linea_id      <span class="fn">integer</span>  <span class="kw">references</span> lineas(id) <span class="kw">on delete cascade</span>,
+    maquina_id    <span class="fn">integer</span>  <span class="kw">references</span> maquinas(id),
+    posicion      <span class="fn">smallint</span> <span class="kw">not null</span>,          <span class="cm">-- 1 = inicio de la línea</span>
+    detiene_linea <span class="fn">boolean</span>  <span class="kw">not null default false</span>,  <span class="cm">-- cuello de botella</span>
+    <span class="kw">primary key</span> (linea_id, maquina_id),
+    <span class="kw">unique</span> (linea_id, posicion)
+);</pre>
+
+      <p class="small">En la app, el panel lateral lista las líneas con su estado y abre la vista en
+        secuencia; el botón <em>Editar trama</em> permite agregar, quitar y reordenar máquinas y marcar
+        el cuello de botella (solo uno por línea).</p>
     </section>
 
 
@@ -729,6 +766,11 @@
           siguen entendiendo el estado.</li>
         <li><strong>Rojo muestra causa y hora de inicio</strong>, no solo «detenida»: el supervisor que pasa
           por detrás lo lee sin abrir nada.</li>
+        <li><strong>Panel lateral de líneas</strong>: cada línea con su estado (operando / parcial / total).
+          Al elegir una, el tablero pasa a mostrar la <em>secuencia</em> de máquinas, no las áreas: el
+          operador ve el flujo tal como lo camina.</li>
+        <li><strong>Naranja = arrastrada</strong>: una máquina detenida por otra muestra «Detenida por X» y
+          se reanuda desde ahí mismo, sin registrar una segunda parada.</li>
       </ul>
 
       <h3>Reglas de interacción <span class="tag">no negociables</span></h3>
