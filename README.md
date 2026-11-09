@@ -3,6 +3,10 @@
 Sistema de captura de detenciones (2 toques), operación offline en tablets y analítica de causa raíz
 para planta de procesamiento pesquero.
 
+![Tablero de planta](captura-tablero.png)
+
+**Estado:** base desplegada en Neon (PostgreSQL 18.6) · 17/17 pruebas pasando · PWA funcional contra esa base.
+
 ## Contenido
 
 | Archivo | Qué es |
