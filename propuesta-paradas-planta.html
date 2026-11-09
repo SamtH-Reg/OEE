@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Registro de paradas de planta · Propuesta técnica</title>
+<style>
+  :root{
+    --bg:#0A0E13; --bg2:#0E141B; --panel:#111922; --panel2:#151F29;
+    --line:#1F2C39; --line2:#2A3B4B;
+    --ink:#E8EFF6; --muted:#93A6B8; --dim:#64798C;
+    --amber:#F0A93B; --teal:#35C2A5; --red:#E2564C; --green:#4CC38A; --blue:#5AA9E6;
+    --mono:ui-monospace,SFMono-Regular,"Cascadia Mono","JetBrains Mono",Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:16px/1.65 ui-sans-serif,system-ui,"Segoe UI",Roboto,Inter,Arial,sans-serif;
+       -webkit-font-smoothing:antialiased}
+  a{color:var(--amber);text-decoration:none}
+  a:hover{text-decoration:underline}
+
+  .page{max-width:1240px;margin:0 auto;padding:0 28px 120px}
+  .wrap{display:grid;grid-template-columns:236px minmax(0,1fr);gap:52px;align-items:start}
+
+  /* portada */
+  .cover{padding:64px 0 40px;border-bottom:1px solid var(--line);margin-bottom:48px}
+  .eyebrow{font-size:12px;letter-spacing:3.2px;text-transform:uppercase;color:var(--amber);font-weight:600}
+  h1{font-size:clamp(34px,4.6vw,56px);line-height:1.04;letter-spacing:-.02em;margin:16px 0 18px;font-weight:750}
+  h1 em{font-style:normal;color:var(--amber)}
+  .lede{font-size:19px;line-height:1.6;color:var(--muted);max-width:62ch;margin:0 0 26px}
+  .chips{display:flex;flex-wrap:wrap;gap:9px;margin-bottom:26px}
+  .chip{font-size:12.5px;padding:7px 12px;border:1px solid var(--line2);border-radius:999px;color:var(--muted);background:#0e151d}
+  .chip b{color:var(--ink);font-weight:600}
+  .status{display:flex;gap:14px;align-items:flex-start;padding:16px 18px;border-radius:14px;
+          background:linear-gradient(150deg,#10251d,#0d1a15);border:1px solid #1f4a37}
+  .status .dot{width:9px;height:9px;border-radius:50%;background:var(--green);margin-top:8px;box-shadow:0 0 12px var(--green);flex:0 0 auto}
+  .status p{margin:0;font-size:14.5px;color:#B9D8C9}
+  .status b{color:#E9FFF5}
+
+  /* índice */
+  nav{position:sticky;top:26px;font-size:13.5px;border-left:1px solid var(--line);padding-left:18px}
+  nav .t{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--dim);margin-bottom:14px}
+  nav a{display:block;color:var(--muted);padding:5px 0;line-height:1.35}
+  nav a:hover{color:var(--ink);text-decoration:none}
+  nav a span{color:var(--dim);font-family:var(--mono);font-size:11.5px;margin-right:8px}
+  nav .sep{height:1px;background:var(--line);margin:16px 0}
+  nav .meta{font-size:12px;color:var(--dim);line-height:1.6}
+  nav .meta b{color:var(--muted);font-weight:600;display:block}
+
+  /* secciones */
+  section{padding-top:26px;margin-bottom:72px;scroll-margin-top:24px}
+  .kicker{display:flex;align-items:center;gap:14px;margin-bottom:10px}
+  .num{width:40px;height:40px;border-radius:12px;border:1px solid var(--line2);display:grid;place-items:center;
+       font-family:var(--mono);font-size:15px;color:var(--amber);background:#0e151d;flex:0 0 auto}
+  .kicker .lab{font-size:11.5px;letter-spacing:2.6px;text-transform:uppercase;color:var(--dim)}
+  h2{font-size:clamp(26px,2.6vw,34px);line-height:1.15;letter-spacing:-.015em;margin:0 0 10px;font-weight:700}
+  h3{font-size:19px;margin:36px 0 10px;letter-spacing:-.005em;font-weight:650}
+  h3 .tag{font-size:11px;letter-spacing:1.6px;text-transform:uppercase;color:var(--dim);margin-left:10px;font-weight:600}
+  p{color:#C6D4E1;margin:0 0 14px}
+  p.small{font-size:14.5px;color:var(--muted)}
+  ul,ol{color:#C6D4E1;margin:0 0 16px;padding-left:22px}
+  li{margin-bottom:7px}
+  strong{color:#fff;font-weight:600}
+  code{font-family:var(--mono);font-size:.88em;background:#16212c;border:1px solid var(--line);
+       padding:1px 6px;border-radius:5px;color:#E9D2A8;white-space:nowrap}
+  hr{border:0;border-top:1px solid var(--line);margin:34px 0}
+
+  /* componentes */
+  .grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:18px 0 8px}
+  .grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin:18px 0 8px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 18px 14px}
+  .card h4{margin:0 0 8px;font-size:15.5px;letter-spacing:.1px}
+  .card p{margin:0;font-size:14px;color:var(--muted);line-height:1.55}
+  .card .kpi{font-size:30px;font-weight:700;letter-spacing:-.02em;color:var(--amber);line-height:1.1;margin-bottom:4px;font-variant-numeric:tabular-nums}
+  .card .kpi small{font-size:14px;color:var(--muted);font-weight:500;letter-spacing:0}
+
+  .callout{border-radius:12px;padding:16px 18px;margin:20px 0;font-size:14.8px;line-height:1.6;
+           border:1px solid;display:flex;gap:14px}
+  .callout .ic{flex:0 0 auto;font-family:var(--mono);font-size:12px;letter-spacing:1px;color:var(--dim);padding-top:2px}
+  .callout p{margin:0;color:#CBD9E5}
+  .callout.warn{background:#22180c;border-color:#4a3413}
+  .callout.info{background:#0e1a22;border-color:#1f3c4d}
+  .callout.ok{background:#0f1f19;border-color:#224a39}
+
+  table{width:100%;border-collapse:collapse;margin:18px 0 10px;font-size:14.2px}
+  th{text-align:left;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--dim);
+     font-weight:600;padding:0 12px 9px;border-bottom:1px solid var(--line2)}
+  td{padding:11px 12px;border-bottom:1px solid var(--line);vertical-align:top;color:#C6D4E1}
+  td.mono,th.mono{font-family:var(--mono);font-size:12.6px;color:#D8C39A}
+  td,th{overflow-wrap:anywhere}
+  main{min-width:0}
+  .wrap>main{min-width:0}
+  tr:hover td{background:#0f161e}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+
+  pre{margin:16px 0;background:#080D12;border:1px solid var(--line);border-radius:12px;
+      padding:16px 18px;overflow:auto;font-family:var(--mono);font-size:12.8px;line-height:1.62;color:#C9D6E2;max-height:560px}
+  pre::-webkit-scrollbar{width:10px;height:10px}
+  pre::-webkit-scrollbar-thumb{background:#24313d;border-radius:6px}
+  .cm{color:#5E7A8F}
+  .kw{color:#E0A458}
+  .st{color:#8FBF7F}
+  .fn{color:#6FB3D9}
+  .filelabel{display:flex;align-items:center;gap:10px;font-family:var(--mono);font-size:12px;
+             color:var(--dim);margin:22px 0 -6px;letter-spacing:.4px}
+  .filelabel b{color:var(--muted);font-weight:600}
+
+  figure{margin:22px 0}
+  figcaption{font-size:12.5px;color:var(--dim);margin-top:8px;text-align:center}
+  svg{max-width:100%;height:auto;display:block}
+
+  .flow{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:20px 0 6px;align-items:stretch}
+  .step{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px}
+  .step .n{font-family:var(--mono);font-size:11px;color:var(--amber);letter-spacing:1.5px}
+  .step b{display:block;margin:6px 0 4px;font-size:14.5px}
+  .step span{font-size:13px;color:var(--muted);line-height:1.45}
+
+  .foot{border-top:1px solid var(--line);padding-top:22px;color:var(--dim);font-size:13px}
+
+  @media (max-width:1040px){
+    .wrap{grid-template-columns:1fr;gap:0}
+    nav{display:none}
+    .grid2,.grid3,.flow{grid-template-columns:1fr}
+    .page{padding:0 18px 80px}
+  }
+  @media print{
+    body{background:#fff;color:#111}
+    .page{max-width:none}
+    nav,.chips{display:none}
+    .card,.callout,pre{background:#f7f7f7;border-color:#ddd;color:#222}
+    p,li,td{color:#222}
+    h1,h2,h3,strong{color:#000}
+    .wrap{display:block}
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="cover">
+    <div class="eyebrow">Propuesta técnica · v1.0</div>
+    <h1>Registro de paradas<br>e indicadores de planta</h1>
+    <p class="lede">Sistema de captura de detenciones con la regla de los 2 clics, operación offline en tablets
+      y analítica de causa raíz. Diseñado para una planta de procesamiento pesquero: humedad, frío,
+      guantes y Wi-Fi que se cae.</p>
+    <div class="chips">
+      <span class="chip"><b>PostgreSQL 18</b> · Neon</span>
+      <span class="chip">React + PWA <b>offline-first</b></span>
+      <span class="chip">Registro en <b>2 clics</b></span>
+      <span class="chip">Hardware <b>IP69K</b></span>
+      <span class="chip">Pareto · MTBF · OEE</span>
+    </div>
+    <div class="status">
+      <span class="dot"></span>
+      <p><b>Base de datos creada y probada.</b> El esquema completo está desplegado en el proyecto
+        Neon <b>OEE. PROCESOS</b> (aws-sa-east-1, PostgreSQL 18.6) con datos de demostración:
+        171 paradas, 13 máquinas, 4 áreas, 28 turnos. Las <b>16 pruebas de integridad y sincronización</b>
+        pasan contra la base real.</p>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <nav>
+      <div class="t">Contenido</div>
+      <a href="#resumen"><span>00</span>Resumen y decisiones</a>
+      <a href="#modelo"><span>01</span>Modelo de datos</a>
+      <a href="#arquitectura"><span>02</span>Arquitectura y stack</a>
+      <a href="#offline"><span>03</span>Estrategia offline</a>
+      <a href="#ux"><span>04</span>UX de los 2 clics</a>
+      <a href="#analitica"><span>05</span>Historial y Pareto</a>
+      <a href="#hardware"><span>06</span>Hardware en planta</a>
+      <a href="#plan"><span>07</span>Plan y riesgos</a>
+      <a href="#anexos"><span>08</span>Anexos</a>
+      <div class="sep"></div>
+      <div class="meta">
+        <b>Entregables</b>
+        sql/esquema_paradas.sql<br>
+        sql/semilla_demo.sql<br>
+        mockup-tablet.html<br>
+        README.md
+      </div>
+    </nav>
+
+    <main>
+
+    <!-- ============================ 00 ============================ -->
+    <section id="resumen">
+      <div class="kicker"><div class="num">00</div><div class="lab">Resumen ejecutivo</div></div>
+      <h2>Qué se construye y qué se decide</h2>
+      <p>Tres cosas, en este orden: <strong>capturar la parada sin fricción</strong> (2 toques, sin escribir),
+        <strong>no perder el registro aunque se caiga la red</strong> (offline real, no un formulario que falla)
+        y <strong>convertir esos datos en decisiones</strong> (Pareto, disponibilidad, MTBF por máquina).</p>
+
+      <div class="grid3">
+        <div class="card"><div class="kpi">2<small> toques</small></div><p>Abrir una parada: máquina + causa.
+          Cerrarla: máquina + «Reanudar». Sin formularios, sin confirmaciones.</p></div>
+        <div class="card"><div class="kpi">0<small> pérdidas</small></div><p>Cola local en IndexedDB con
+          identificador único por registro: la tablet sigue trabajando días sin red y sincroniza sola.</p></div>
+        <div class="card"><div class="kpi">9<small> de 18 causas</small></div><p>En la muestra de 14 días,
+          9 causas concentran el 80% del tiempo muerto. Ese es el informe que cambia las reuniones.</p></div>
+      </div>
+
+      <h3>Decisiones que conviene discutir antes de codificar</h3>
+      <table>
+        <thead><tr><th style="width:24%">Decisión</th><th style="width:34%">Elección</th><th>Por qué</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Motor de base</strong></td><td>PostgreSQL (Neon)</td>
+              <td>Índices parciales, <code>timestamptz</code>, funciones y ventanas analíticas resuelven el Pareto
+                  y la sincronización en la propia base. MySQL obliga a simular varias de esas piezas.</td></tr>
+          <tr><td><strong>Arquitectura</strong></td><td>Monolito modular</td>
+              <td>Una planta, cuatro áreas, ~20 tablets. Microservicios acá solo agregan latencia, despliegues y
+                  modos de falla. Los módulos quedan separados por dominio para poder extraerlos después.</td></tr>
+          <tr><td><strong>Tablet</strong></td><td>PWA, no app nativa</td>
+              <td>Un solo código para tablet, PC de supervisión y celular del jefe de turno. Se actualiza sin
+                  pasar por tienda y el offline se resuelve con Service Worker + IndexedDB.</td></tr>
+          <tr><td><strong>Identidad del registro</strong></td><td>UUID generado en el dispositivo</td>
+              <td>Es lo que hace la sincronización idempotente: si el envío se reintenta 40 veces, la base
+                  guarda una sola parada.</td></tr>
+          <tr><td><strong>Paradas planificadas</strong></td><td>Marcadas en el catálogo de causas</td>
+              <td>Un lavado de línea no es tiempo muerto. Sin esa distinción, el Pareto acusa a Operaciones de
+                  un tiempo que estaba planificado.</td></tr>
+          <tr><td><strong>Borrado</strong></td><td>Nunca. Se anula con motivo</td>
+              <td>El historial es el activo. Toda corrección queda auditada con usuario, fecha y campos cambiados.</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout info">
+        <div class="ic">NOTA</div>
+        <p>El requerimiento original decía «PostgreSQL o MySQL». Se entrega PostgreSQL porque el proyecto ya
+          existe en Neon y porque tres requisitos duros (una sola parada abierta por máquina, idempotencia de
+          sincronización y Pareto acumulado) se implementan en menos código y con más garantías.
+          El anexo 8.1 lista los cambios exactos para portarlo a MySQL si fuese obligatorio.</p>
+      </div>
+    </section>
+
+    <!-- ============================ 01 ============================ -->
+    <section id="modelo">
+      <div class="kicker"><div class="num">01</div><div class="lab">Modelo de datos</div></div>
+      <h2>Seis tablas, tres reglas que evitan el desorden</h2>
+      <p>El modelo pedido (áreas, máquinas, categorías, causas, turnos, paradas) se mantiene tal cual.
+        Se agregan cinco columnas y una tabla de auditoría que son las que sostienen la operación real:
+        <code>uuid_cliente</code>, <code>estado</code>, <code>es_planificada</code>,
+        <code>registrado_en/sincronizado_en</code> y <code>version</code>.</p>
+
+      <figure>
+        <svg viewBox="0 0 940 520" role="img" aria-label="Diagrama entidad-relación">
+          <defs>
+            <style>
+              .bx{fill:#111922;stroke:#2A3B4B;stroke-width:1.2;rx:10}
+              .bt{fill:#E8EFF6;font:600 13px ui-sans-serif,system-ui;letter-spacing:.2px}
+              .bf{fill:#93A6B8;font:11.5px ui-monospace,monospace}
+              .rel{stroke:#3C5468;stroke-width:1.4;fill:none;marker-end:url(#ar)}
+              .rl{fill:#64798C;font:10px ui-sans-serif,system-ui;letter-spacing:1.2px;text-transform:uppercase}
+            </style>
+            <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+              <path d="M0,1 L9,5 L0,9" fill="#3C5468"/>
+            </marker>
+          </defs>
+
+          <rect class="bx" x="20" y="30" width="176" height="96" rx="10"/>
+          <text class="bt" x="36" y="54">areas</text>
+          <text class="bf" x="36" y="74">id · codigo</text>
+          <text class="bf" x="36" y="90">nombre · orden</text>
+          <text class="bf" x="36" y="106">activa</text>
+
+          <rect class="bx" x="250" y="30" width="200" height="112" rx="10"/>
+          <text class="bt" x="266" y="54">maquinas</text>
+          <text class="bf" x="266" y="74">id · area_id →</text>
+          <text class="bf" x="266" y="90">codigo · nombre</text>
+          <text class="bf" x="266" y="106">nombre_corto</text>
+          <text class="bf" x="266" y="122">criticidad · activa</text>
+
+          <rect class="bx" x="20" y="200" width="176" height="96" rx="10"/>
+          <text class="bt" x="36" y="224">categorias_falla</text>
+          <text class="bf" x="36" y="244">id · codigo</text>
+          <text class="bf" x="36" y="260">nombre · color</text>
+          <text class="bf" x="36" y="276">icono · orden</text>
+
+          <rect class="bx" x="250" y="200" width="200" height="112" rx="10"/>
+          <text class="bt" x="266" y="224">codigos_causa</text>
+          <text class="bf" x="266" y="244">id · categoria_id →</text>
+          <text class="bf" x="266" y="260">codigo · descripcion</text>
+          <text class="bf" x="266" y="276">es_planificada</text>
+          <text class="bf" x="266" y="292">requiere_comentario</text>
+
+          <rect class="bx" x="520" y="30" width="190" height="112" rx="10"/>
+          <text class="bt" x="536" y="54">turnos</text>
+          <text class="bf" x="536" y="74">id · fecha</text>
+          <text class="bf" x="536" y="90">nombre (Día/Noche)</text>
+          <text class="bf" x="536" y="106">supervisor</text>
+          <text class="bf" x="536" y="122">toneladas_planificadas</text>
+
+          <rect class="bx" x="520" y="200" width="240" height="200" rx="10" style="stroke:#4A6B84"/>
+          <text class="bt" x="536" y="224" style="font-size:14px">registro_paradas</text>
+          <text class="bf" x="536" y="246">id · uuid_cliente</text>
+          <text class="bf" x="536" y="262">maquina_id →</text>
+          <text class="bf" x="536" y="278">codigo_causa_id →</text>
+          <text class="bf" x="536" y="294">turno_id →</text>
+          <text class="bf" x="536" y="310">hora_inicio · hora_fin</text>
+          <text class="bf" x="536" y="326">impacto · % afectación</text>
+          <text class="bf" x="536" y="342">comentarios (operador / mant.)</text>
+          <text class="bf" x="536" y="358">estado · origen · version</text>
+          <text class="bf" x="536" y="374">registrado / sincronizado_en</text>
+
+          <rect class="bx" x="800" y="200" width="126" height="128" rx="10"/>
+          <text class="bt" x="814" y="224">auditoría</text>
+          <text class="bf" x="814" y="244">parada_id →</text>
+          <text class="bf" x="814" y="260">accion</text>
+          <text class="bf" x="814" y="276">campos[]</text>
+          <text class="bf" x="814" y="292">anterior / nuevo</text>
+          <text class="bf" x="814" y="308">usuario</text>
+
+          <path class="rel" d="M196 78 L246 78"/>
+          <path class="rel" d="M196 248 L246 248"/>
+          <path class="rel" d="M450 104 C 476 104, 494 206, 516 214"/>
+          <path class="rel" d="M450 256 L516 262"/>
+          <path class="rel" d="M616 142 L616 196"/>
+          <path class="rel" d="M760 300 L796 300"/>
+
+          <text class="rl" x="200" y="70">1 · n</text>
+          <text class="rl" x="200" y="240">1 · n</text>
+          <text class="rl" x="492" y="80">1 · n</text>
+          <text class="rl" x="492" y="288">1 · n</text>
+        </svg>
+        <figcaption>Un registro de parada apunta a máquina, causa y turno. La auditoría cuelga de cada parada.</figcaption>
+      </figure>
+
+      <h3>Las tres reglas que sostienen todo <span class="tag">garantizadas por la base</span></h3>
+      <div class="grid3">
+        <div class="card"><h4>1 · Una parada abierta por máquina</h4>
+          <p>Índice único parcial sobre <code>maquina_id</code> cuando <code>estado = 'activa'</code>. Si dos
+             operadores tocan la misma máquina, la base no permite el duplicado y la función devuelve la
+             parada vigente en lugar de un error.</p></div>
+        <div class="card"><h4>2 · Un registro, un UUID</h4>
+          <p><code>uuid_cliente</code> único. La tablet lo genera antes de tocar la red; el servidor hace
+             <code>on conflict do nothing</code>. Reintentos, doble envío y reconexiones no duplican nada.</p></div>
+        <div class="card"><h4>3 · Nada se borra</h4>
+          <p>Anulación con motivo obligatorio y trigger de auditoría con el diff de columnas. El indicador
+             excluye las anuladas, pero el historial conserva el rastro.</p></div>
+      </div>
+
+      <h3>Campos que se agregaron al modelo pedido <span class="tag">y por qué</span></h3>
+      <table>
+        <thead><tr><th class="mono">Campo</th><th>Para qué sirve</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">uuid_cliente</td><td>Idempotencia de la sincronización offline. Sin esto, cada reintento de red crea una parada falsa.</td></tr>
+          <tr><td class="mono">estado</td><td><code>activa</code> / <code>cerrada</code> / <code>anulada</code>. Reemplaza el «hora_fin NULL» como único indicador de estado y permite anular sin borrar.</td></tr>
+          <tr><td class="mono">es_planificada</td><td>En <code>codigos_causa</code>: separa lavado de línea y cambio de producto del tiempo muerto real. Es la diferencia entre un Pareto honesto y uno que culpa a Operaciones.</td></tr>
+          <tr><td class="mono">impacto / porcentaje_afectacion</td><td>Parada total o parcial. Con parcial se registra qué fracción de la línea se detuvo; sin el porcentaje, una parada parcial de 20 minutos se cuenta como si hubiese parado todo.</td></tr>
+          <tr><td class="mono">registrado_en / sincronizado_en</td><td>Dos relojes: el de la tablet (única fuente cuando hubo corte de red) y el del servidor. La diferencia delata tablets desfasadas.</td></tr>
+          <tr><td class="mono">version</td><td>Control de concurrencia optimista para las correcciones de supervisor.</td></tr>
+          <tr><td class="mono">nombre_corto</td><td>En <code>maquinas</code>: «Cinta 1» para la tarjeta del tablero, «Cinta Transportadora 1» para los informes. Un nombre largo en una tarjeta de 200 px se corta y el operador toca la equivocada.</td></tr>
+        </tbody>
+      </table>
+
+      <div class="filelabel"><b>01_esquema.sql</b> — tablas, restricciones e índices (extracto)</div>
+<pre><span class="cm">-- Una sola parada abierta por máquina: la regla que evita el doble registro</span>
+<span class="kw">create unique index</span> ux_parada_abierta_por_maquina
+    <span class="kw">on</span> registro_paradas (maquina_id)
+    <span class="kw">where</span> estado = <span class="st">'activa'</span>;
+
+<span class="kw">create table</span> registro_paradas (
+    id                        <span class="fn">bigint</span> <span class="kw">generated always as identity primary key</span>,
+    uuid_cliente              <span class="fn">uuid</span>        <span class="kw">not null default</span> gen_random_uuid(),
+    maquina_id                <span class="fn">integer</span>     <span class="kw">not null references</span> maquinas(id),
+    codigo_causa_id           <span class="fn">integer</span>     <span class="kw">not null references</span> codigos_causa(id),
+    turno_id                  <span class="fn">bigint</span>      <span class="kw">not null references</span> turnos(id),
+    hora_inicio               <span class="fn">timestamptz</span> <span class="kw">not null</span>,
+    hora_fin                  <span class="fn">timestamptz</span>,            <span class="cm">-- NULL = en curso</span>
+    impacto                   <span class="fn">text</span> <span class="kw">not null default</span> <span class="st">'Total'</span>
+                              <span class="kw">check</span> (impacto <span class="kw">in</span> (<span class="st">'Total'</span>,<span class="st">'Parcial'</span>)),
+    porcentaje_afectacion     <span class="fn">numeric(5,2)</span>,
+    comentarios_operador      <span class="fn">text</span>,
+    comentarios_mantenimiento <span class="fn">text</span>,
+    estado                    <span class="fn">text</span> <span class="kw">not null default</span> <span class="st">'activa'</span>,
+    origen                    <span class="fn">text</span> <span class="kw">not null default</span> <span class="st">'tablet'</span>,
+    dispositivo_id            <span class="fn">text</span>,
+    registrado_en             <span class="fn">timestamptz</span> <span class="kw">not null default</span> now(),
+    sincronizado_en           <span class="fn">timestamptz</span> <span class="kw">not null default</span> now(),
+    version                   <span class="fn">integer</span> <span class="kw">not null default</span> 1,
+
+    <span class="kw">constraint</span> ck_uuid_cliente_unico <span class="kw">unique</span> (uuid_cliente),
+    <span class="kw">constraint</span> ck_fin_posterior <span class="kw">check</span> (hora_fin <span class="kw">is null or</span> hora_fin &gt; hora_inicio),
+    <span class="kw">constraint</span> ck_estado_horas <span class="kw">check</span> (
+        (estado = <span class="st">'activa'</span>  <span class="kw">and</span> hora_fin <span class="kw">is null</span>) <span class="kw">or</span>
+        (estado = <span class="st">'cerrada'</span> <span class="kw">and</span> hora_fin <span class="kw">is not null</span>) <span class="kw">or</span>
+        (estado = <span class="st">'anulada'</span>)
+    )
+);</pre>
+
+      <p class="small">El script completo (691 líneas, comentado, con vistas, funciones y triggers) está en
+        <code>sql/esquema_paradas.sql</code>. Se ejecuta una vez y no requiere pasos manuales.</p>
+
+      <h3>Por qué las duraciones no se guardan como columna</h3>
+      <p>La duración se calcula en la vista <code>v_paradas</code>:
+        <code>extract(epoch from (coalesce(hora_fin, now()) - hora_inicio))/60</code>.
+        Guardarla sería un dato derivado que se desincroniza en cuanto un supervisor corrige una hora.
+        Así, una parada en curso siempre muestra sus minutos reales y una corrección se refleja al instante.</p>
+    </section>
+
+
+    <!-- ============================ 02 ============================ -->
+    <section id="arquitectura">
+      <div class="kicker"><div class="num">02</div><div class="lab">Arquitectura y stack</div></div>
+      <h2>Monolito modular: un despliegue, cinco dominios separados</h2>
+      <p>La tentación es microservicios. Con <strong>una planta, cuatro áreas, ~20 tablets y un solo equipo
+        de desarrollo</strong>, un microservicio por módulo significa cinco despliegues, cinco configuraciones
+        de red y cinco formas de caerse — a cambio de una escalabilidad que este sistema nunca va a necesitar
+        (el pico real son 20 tablets enviando un evento cada varios minutos).</p>
+
+      <p>Monolito modular: <em>un</em> proceso desplegable, pero con fronteras de dominio explícitas.
+        Si mañana hay que separar la analítica porque corre informes pesados, ya está aislada.</p>
+
+      <figure>
+        <svg viewBox="0 0 920 430" role="img" aria-label="Arquitectura de componentes">
+          <defs>
+            <style>
+              .box{fill:#111922;stroke:#2A3B4B;stroke-width:1.2}
+              .h{fill:#E8EFF6;font:600 13.5px ui-sans-serif,system-ui}
+              .s{fill:#93A6B8;font:11.5px ui-monospace,monospace}
+              .sm{fill:#64798C;font:10.5px ui-sans-serif,system-ui;letter-spacing:1.4px;text-transform:uppercase}
+              .arw{stroke:#3C5468;stroke-width:1.4;fill:none;marker-end:url(#a2)}
+              .alb{fill:#8FA3B5;font:11px ui-monospace,monospace}
+            </style>
+            <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+              <path d="M0,1 L9,5 L0,9" fill="#3C5468"/>
+            </marker>
+          </defs>
+
+          <text class="sm" x="30" y="26">Planta · tablets</text>
+          <rect class="box" x="30" y="40" width="250" height="150" rx="12"/>
+          <text class="h" x="46" y="66">PWA (React)</text>
+          <text class="s" x="46" y="88">Service Worker · app shell</text>
+          <text class="s" x="46" y="106">IndexedDB (Dexie)</text>
+          <text class="s" x="46" y="124">— catálogo espejo</text>
+          <text class="s" x="46" y="142">— outbox (cola de eventos)</text>
+          <text class="s" x="46" y="160">— paradas en curso</text>
+          <rect x="46" y="170" width="86" height="10" rx="5" fill="#1f8a55"/>
+          <text class="s" x="140" y="179" style="font-size:10.5px">funciona sin red</text>
+
+          <text class="sm" x="360" y="26">Servidor · Node 22</text>
+          <rect class="box" x="360" y="40" width="240" height="250" rx="12"/>
+          <text class="h" x="376" y="66">API Fastify + TypeScript</text>
+          <text class="s" x="376" y="92">/catalogo        catálogo</text>
+          <text class="s" x="376" y="112">/paradas         operación</text>
+          <text class="s" x="376" y="132">/sync            sincronización</text>
+          <text class="s" x="376" y="152">/historial       administración</text>
+          <text class="s" x="376" y="172">/kpis            analítica</text>
+          <text class="s" x="376" y="200" style="fill:#64798C">auth: PIN operador / JWT supervisor</text>
+          <text class="s" x="376" y="220" style="fill:#64798C">validación zod · logs · Sentry</text>
+          <text class="s" x="376" y="246" style="fill:#64798C">sin estado (sesión en JWT)</text>
+          <text class="s" x="376" y="266" style="fill:#64798C">reintentos y rate limit</text>
+
+          <text class="sm" x="680" y="26">Datos · Neon</text>
+          <rect class="box" x="680" y="40" width="210" height="250" rx="12" style="stroke:#4A6B84"/>
+          <text class="h" x="696" y="66">PostgreSQL 18</text>
+          <text class="s" x="696" y="92">tablas + restricciones</text>
+          <text class="s" x="696" y="112">v_paradas</text>
+          <text class="s" x="696" y="132">v_resumen_maquina_turno</text>
+          <text class="s" x="696" y="152">v_disponibilidad_turno</text>
+          <text class="s" x="696" y="172">fn_abrir / fn_cerrar</text>
+          <text class="s" x="696" y="192">fn_sync_lote</text>
+          <text class="s" x="696" y="212">fn_pareto_causas</text>
+          <text class="s" x="696" y="232">fn_mtbf_mttr</text>
+          <text class="s" x="696" y="258" style="fill:#64798C">rama main = producción</text>
+          <text class="s" x="696" y="274" style="fill:#64798C">rama staging = pruebas</text>
+
+          <rect class="box" x="30" y="300" width="250" height="90" rx="12"/>
+          <text class="h" x="46" y="326">Supervisión (web)</text>
+          <text class="s" x="46" y="348">historial · correcciones</text>
+          <text class="s" x="46" y="366">pareto · exportar CSV</text>
+
+          <path class="arw" d="M280 110 L356 110"/>
+          <text class="alb" x="288" y="102">HTTPS/JSON</text>
+          <path class="arw" d="M356 140 L284 140"/>
+          <text class="alb" x="288" y="158">202 + lote</text>
+          <path class="arw" d="M600 110 L676 110"/>
+          <text class="alb" x="608" y="102">SQL</text>
+          <path class="arw" d="M155 300 L155 196"/>
+          <text class="alb" x="162" y="250">misma PWA</text>
+        </svg>
+        <figcaption>La tablet nunca espera a la red para confirmar una parada: escribe en su outbox y responde al instante.</figcaption>
+      </figure>
+
+      <h3>Stack recomendado <span class="tag">y la alternativa que se descartó</span></h3>
+      <table>
+        <thead><tr><th style="width:16%">Capa</th><th style="width:26%">Elección</th><th style="width:24%">Alternativa</th><th>Por qué</th></tr></thead>
+        <tbody>
+          <tr><td>Base de datos</td><td>PostgreSQL 18 · Neon</td><td>MySQL 8</td>
+              <td>Ya creada. Índices parciales, <code>timestamptz</code>, funciones, ventanas y ramas de base para probar migraciones sin tocar producción.</td></tr>
+          <tr><td>Backend</td><td>Node 22 + Fastify + TypeScript</td><td>NestJS, Django</td>
+              <td>Fastify es liviano y rápido; el dominio es pequeño. NestJS si el equipo crece y quiere estructura impuesta.</td></tr>
+          <tr><td>Acceso a datos</td><td>Drizzle ORM + migraciones SQL</td><td>Prisma</td>
+              <td>El esquema ya está escrito en SQL: Drizzle respeta ese SQL en vez de generar otro. Las funciones y vistas se versionan como migraciones.</td></tr>
+          <tr><td>Frontend</td><td>React 19 + Vite + Tailwind</td><td>Vue, Svelte</td>
+              <td>Ecosistema y disponibilidad de gente. El peso real está en el offline, no en el framework.</td></tr>
+          <tr><td>Offline</td><td>Workbox + Dexie (IndexedDB)</td><td>SQLite nativo (Capacitor)</td>
+              <td>PWA pura: sin tiendas, sin builds nativos. SQLite solo si se requiere firma o hardware específico.</td></tr>
+          <tr><td>Tiempo real</td><td>SSE (1 conexión por tablet)</td><td>WebSocket, polling 10 s</td>
+              <td>El tablero solo necesita recibir cambios de otras tablets. SSE reconecta solo y pasa proxys.</td></tr>
+          <tr><td>Autenticación</td><td>PIN de 4 dígitos + JWT corto</td><td>Usuario y clave por operador</td>
+              <td>Nadie escribe una clave con guantes mojados. El turno identifica al grupo; el supervisor sí tiene clave.</td></tr>
+          <tr><td>Hosting</td><td>Vercel (PWA) + Fly.io (API) + Neon</td><td>Servidor propio en planta</td>
+              <td>Si la red de planta no sale a internet, la misma API corre en Docker Compose en un mini PC del laboratorio y Neon se sincroniza por rama.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Contrato de API <span class="tag">5 endpoints para la tablet</span></h3>
+      <table>
+        <thead><tr><th class="mono">Método</th><th class="mono">Ruta</th><th>Uso</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">GET</td><td class="mono">/api/catalogo</td><td>Áreas, máquinas, categorías, causas y turnos vigentes. Se cachea con ETag y se refresca cada 24 h o al cambiar de turno.</td></tr>
+          <tr><td class="mono">POST</td><td class="mono">/api/paradas</td><td>Abrir parada → <code>fn_abrir_parada()</code>. Devuelve el registro (nuevo o el vigente si ya estaba detenida).</td></tr>
+          <tr><td class="mono">PATCH</td><td class="mono">/api/paradas/:uuid/cerrar</td><td>Reanudar → <code>fn_cerrar_parada()</code>. Idempotente.</td></tr>
+          <tr><td class="mono">POST</td><td class="mono">/api/sync</td><td>Lote de la cola offline → <code>fn_sync_lote()</code>. Máximo 100 eventos, respuesta con el estado de cada uno.</td></tr>
+          <tr><td class="mono">GET</td><td class="mono">/api/tablero</td><td>Máquinas por área + parada activa. Es lo que pinta el tablero al abrir la tablet.</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout ok">
+        <div class="ic">OK</div>
+        <p>Las tres operaciones críticas (abrir, cerrar, sincronizar) viven en <strong>funciones de base de datos</strong>,
+          no en el backend. Así, si mañana aparece otro cliente (una app nativa, un script de importación, un
+          Excel conectado), las reglas se cumplen igual. El backend solo autentica y traduce HTTP a SQL.</p>
+      </div>
+    </section>
+
+    <!-- ============================ 03 ============================ -->
+    <section id="offline">
+      <div class="kicker"><div class="num">03</div><div class="lab">Estrategia offline</div></div>
+      <h2>La red se cae: el registro no</h2>
+      <p>En una planta pesquera el Wi-Fi no falla «a veces»: falla cuando hay vapor, cuando entra un carro
+        con carga metálica, cuando el AP de la cámara de congelado amanece con hielo. Un formulario web
+        tradicional en ese escenario pierde la parada completa. La estrategia es <strong>local-first</strong>:
+        la tablet es la fuente de verdad hasta que logra entregar el evento.</p>
+
+      <div class="flow">
+        <div class="step"><div class="n">PASO 01</div><b>Escribir local</b>
+          <span>El toque del operador crea el evento en IndexedDB y actualiza el tablero. Nunca se espera
+          respuesta del servidor.</span></div>
+        <div class="step"><div class="n">PASO 02</div><b>Encolar</b>
+          <span>El evento entra al <em>outbox</em> con su UUID y un número de secuencia. La UI muestra
+          «sin enlace · 3 pendientes», no un error.</span></div>
+        <div class="step"><div class="n">PASO 03</div><b>Reintentar</b>
+          <span>Al volver la red (evento <code>online</code>, cambio de pestaña o cada 30 s) se envía el lote
+          en orden, con backoff de 1 s a 5 min.</span></div>
+        <div class="step"><div class="n">PASO 04</div><b>Conciliar</b>
+          <span>El servidor responde qué eventos ya existían. La tablet borra de la cola solo los confirmados
+          y deja los rechazados con su motivo.</span></div>
+      </div>
+
+      <h3>Qué se guarda en la tablet</h3>
+      <table>
+        <thead><tr><th style="width:20%">Almacén</th><th style="width:18%">Tecnología</th><th>Contenido y vigencia</th></tr></thead>
+        <tbody>
+          <tr><td><strong>App shell</strong></td><td>Cache API (Workbox)</td>
+              <td>HTML, JS, CSS e íconos. Estrategia <em>stale-while-revalidate</em>: abre al instante y se actualiza en segundo plano.</td></tr>
+          <tr><td><strong>Catálogo</strong></td><td>IndexedDB · tabla <code>catalogo</code></td>
+              <td>Áreas, máquinas, categorías, causas y turnos. Se descarga al iniciar sesión y se refresca por ETag o al cambiar de turno. Sin catálogo no se puede registrar: por eso se valida antes de habilitar el tablero.</td></tr>
+          <tr><td><strong>Outbox</strong></td><td>IndexedDB · tabla <code>outbox</code></td>
+              <td>Eventos pendientes: <code>id</code>, <code>tipo</code> (abrir/cerrar/comentario), <code>payload</code>, <code>seq</code>, <code>intentos</code>, <code>ultimo_error</code>.</td></tr>
+          <tr><td><strong>Estado del tablero</strong></td><td>IndexedDB · tabla <code>maquinas</code></td>
+              <td>Estado optimista por máquina, derivado de los eventos locales. Es lo que ve el operador.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Las cinco reglas que hacen que no se duplique nada</h3>
+      <ol>
+        <li><strong>UUID en el dispositivo, no en el servidor.</strong> Si el servidor lo generara, un reintento
+          (la respuesta se perdió pero el insert ocurrió) crearía una segunda parada.</li>
+        <li><strong>Envío en orden por secuencia.</strong> La apertura siempre llega antes que su cierre.
+          Aun así el servidor tolera el desorden: <code>fn_sync_lote</code> ordena por hora de inicio y
+          reconcilia.</li>
+        <li><strong>Una sola parada abierta por máquina.</strong> Si llega una apertura cuando ya hay otra
+          abierta, la anterior se cierra en el instante de la nueva. No quedan dos «en curso» para siempre.</li>
+        <li><strong>Confirmación explícita por evento.</strong> La tablet no borra la cola completa cuando el
+          POST devuelve 200: borra solo los UUID que el servidor confirmó.</li>
+        <li><strong>Sin cierre de sesión con cola pendiente.</strong> El botón de salir se bloquea (o advierte)
+          si hay eventos sin sincronizar. Es la causa más común de pérdida de datos en apps offline.</li>
+      </ol>
+
+      <h3>Conflictos: quién gana</h3>
+      <table>
+        <thead><tr><th style="width:26%">Situación</th><th style="width:30%">Regla</th><th>Resultado</th></tr></thead>
+        <tbody>
+          <tr><td>Dos operadores abren la misma máquina</td><td>La segunda apertura devuelve la parada ya abierta</td><td>Una parada, un dueño, sin mensaje de error en pantalla</td></tr>
+          <tr><td>Comentario editado en dos tablets</td><td>Gana el de mayor <code>version</code>; empate → el más reciente</td><td>Se conserva el último texto y queda el diff en auditoría</td></tr>
+          <tr><td>Supervisor anula mientras la tablet cierra</td><td>La anulación gana; el cierre se rechaza con motivo</td><td>El registro queda anulado y auditable, no resucita</td></tr>
+          <tr><td>Parada creada offline y corregida después</td><td>La corrección es un evento nuevo con su propio autor</td><td>Historial completo, nunca sobrescritura silenciosa</td></tr>
+        </tbody>
+      </table>
+
+      <h3>El reloj es el punto débil (y cómo se controla)</h3>
+      <p>Una tablet sin red y con la hora corrida arruina el indicador. Tres medidas:</p>
+      <ul>
+        <li><strong>NTP en la tablet</strong> y modo kiosco que impide cambiarla a mano.</li>
+        <li><strong>Latido cada 60 s</strong> con la hora del servidor: si el desfase supera 2 minutos, se
+          muestra un aviso al supervisor y queda registrado en <code>dispositivos</code>.</li>
+        <li><strong>Dos marcas de tiempo por fila</strong>: <code>registrado_en</code> (tablet) y
+          <code>sincronizado_en</code> (servidor). El informe puede filtrar por desfase si hiciera falta.</li>
+      </ul>
+
+      <div class="grid3">
+        <div class="card"><div class="kpi">~200<small> bytes</small></div><p>Una parada completa en la cola local.</p></div>
+        <div class="card"><div class="kpi">~2 MB<small> / año</small></div><p>30 paradas diarias durante un año, con comentarios.</p></div>
+        <div class="card"><div class="kpi">48 h<small> de prueba</small></div><p>Protocolo de aceptación: tablet en modo avión dos días, luego reconexión y conciliación sin pérdidas.</p></div>
+      </div>
+
+      <div class="callout warn">
+        <div class="ic">OJO</div>
+        <p><strong>No usar <code>localStorage</code> para la cola.</strong> Es síncrono (congela la UI), tiene
+          ~5 MB, y el navegador lo puede borrar sin aviso. IndexedDB con
+          <code>navigator.storage.persist()</code> es lo mínimo para un dato que no se puede perder.</p>
+      </div>
+    </section>
+
+
+    <!-- ============================ 04 ============================ -->
+    <section id="ux">
+      <div class="kicker"><div class="num">04</div><div class="lab">Experiencia del operador</div></div>
+      <h2>La regla de los 2 toques, sin letra chica</h2>
+      <p>Un operador con guantes de PVC, manos mojadas y la línea deteniéndose no va a completar un formulario
+        de seis campos. Si el registro cuesta, el dato no existe: se anota en un papel al final del turno
+        (o no se anota). Por eso el flujo se reduce a dos toques y <strong>cero texto obligatorio</strong>.</p>
+
+      <div class="grid2">
+        <div class="card"><h4>Abrir una parada</h4>
+          <p><strong>Toque 1:</strong> la tarjeta de la máquina (que está verde).<br>
+             <strong>Toque 2:</strong> la causa concreta (dentro de una de las 5 categorías).<br>
+             Al soltar, el reloj corre y la tarjeta pasa a rojo.</p></div>
+        <div class="card"><h4>Reanudar</h4>
+          <p><strong>Toque 1:</strong> la tarjeta roja.<br>
+             <strong>Toque 2:</strong> «Reanudar operación», el botón que ocupa media pantalla.<br>
+             El sistema fija la hora de fin y calcula los minutos.</p></div>
+      </div>
+
+      <figure>
+        <svg viewBox="0 0 940 430" role="img" aria-label="Tres pantallas del flujo: tablero, categorías, reanudar">
+          <defs>
+            <style>
+              .fr{fill:#0B1016;stroke:#2A3B4B;stroke-width:1.4;rx:14}
+              .ttl{fill:#E8EFF6;font:600 12px ui-sans-serif,system-ui}
+              .lbl{fill:#64798C;font:10px ui-sans-serif,system-ui;letter-spacing:1.6px;text-transform:uppercase}
+              .tileG{fill:#1d7a4b;stroke:#2f9d63;stroke-width:1}
+              .tileR{fill:#b2352d;stroke:#e2564c;stroke-width:1}
+              .tileP{fill:#7a5b14;stroke:#a87f26;stroke-width:1}
+              .tn{fill:#fff;font:600 10.5px ui-sans-serif,system-ui}
+              .ts{fill:#d9ebe1;font:9px ui-sans-serif,system-ui}
+              .cat{fill:#141d26;stroke:#2a3947;stroke-width:1;rx:8}
+              .ct{fill:#E8EFF6;font:600 10.5px ui-sans-serif,system-ui}
+              .cc{fill:#8FA3B5;font:9px ui-monospace,monospace}
+              .big{fill:#1f8a55;stroke:#34b478;stroke-width:1;rx:10}
+              .bigt{fill:#fff;font:700 13px ui-sans-serif,system-ui}
+            </style>
+          </defs>
+
+          <!-- 1: tablero -->
+          <text class="lbl" x="18" y="18">1 · tablero</text>
+          <rect class="fr" x="18" y="28" width="286" height="360" rx="14"/>
+          <rect x="30" y="40" width="262" height="34" rx="8" fill="#111922"/>
+          <text class="ttl" x="42" y="62">Turno Día · 09:42</text>
+          <text class="cc" x="206" y="62" style="fill:#4CC38A">● enlace</text>
+
+          <rect class="tileG" x="30" y="88" width="122" height="78" rx="9"/>
+          <text class="tn" x="40" y="110">Cinta 1</text>
+          <text class="ts" x="40" y="126">▲ operando</text>
+
+          <rect class="tileR" x="160" y="88" width="132" height="78" rx="9"/>
+          <text class="tn" x="170" y="110">Cinta 2</text>
+          <text class="ts" x="170" y="126">■ trabada 09:12</text>
+
+          <rect class="tileG" x="30" y="176" width="122" height="78" rx="9"/>
+          <text class="tn" x="40" y="198">Fileteadora</text>
+          <text class="ts" x="40" y="214">▲ operando</text>
+
+          <rect class="tileG" x="160" y="176" width="132" height="78" rx="9"/>
+          <text class="tn" x="170" y="198">Túnel 2</text>
+          <text class="ts" x="170" y="214">▲ operando</text>
+
+          <rect class="tileG" x="30" y="264" width="122" height="78" rx="9"/>
+          <text class="tn" x="40" y="286">Desvisceradora</text>
+          <text class="ts" x="40" y="302">▲ operando</text>
+
+          <rect class="tileP" x="160" y="264" width="132" height="78" rx="9"/>
+          <text class="tn" x="170" y="286">Etiquetadora</text>
+          <text class="ts" x="170" y="302">◷ lavado 09:10</text>
+
+          <!-- 2: categorías -->
+          <text class="lbl" x="328" y="18">2 · causa (1 de 5)</text>
+          <rect class="fr" x="328" y="28" width="286" height="360" rx="14"/>
+          <text class="ttl" x="344" y="56">Cinta 2 · ¿qué la detuvo?</text>
+          <rect class="cat" x="344" y="72" width="120" height="96" rx="9"/>
+          <text class="ct" x="360" y="118">Mecánica</text><text class="cc" x="360" y="134">5 causas</text>
+          <rect class="cat" x="474" y="72" width="124" height="96" rx="9"/>
+          <text class="ct" x="490" y="118">Eléctrica</text><text class="cc" x="490" y="134">4 causas</text>
+          <rect class="cat" x="344" y="178" width="120" height="96" rx="9"/>
+          <text class="ct" x="360" y="224">Servicios</text><text class="cc" x="360" y="240">4 causas</text>
+          <rect class="cat" x="474" y="178" width="124" height="96" rx="9"/>
+          <text class="ct" x="490" y="224">Operativa</text><text class="cc" x="490" y="240">4 causas</text>
+          <rect class="cat" x="344" y="284" width="120" height="72" rx="9"/>
+          <text class="ct" x="360" y="318">Logística</text><text class="cc" x="360" y="334">3 causas</text>
+          <text class="cc" x="482" y="322" style="fill:#64798C">sin scroll</text>
+          <text class="cc" x="482" y="338" style="fill:#64798C">sin submenús</text>
+
+          <!-- 3: reanudar -->
+          <text class="lbl" x="638" y="18">3 · reanudar</text>
+          <rect class="fr" x="638" y="28" width="286" height="360" rx="14"/>
+          <text class="ttl" x="654" y="56">Cinta 2 · parada en curso</text>
+          <text class="ct" x="654" y="100" style="font-size:13px">Cinta trabada</text>
+          <text class="cc" x="654" y="118">desde 09:12 · no planificada</text>
+          <text x="654" y="182" style="fill:#fff;font:700 40px ui-monospace,monospace">12:48</text>
+          <rect class="big" x="654" y="214" width="254" height="72" rx="11"/>
+          <text class="bigt" x="682" y="256">▶  Reanudar operación</text>
+          <text class="cc" x="654" y="316">+ comentario (opcional)</text>
+          <text class="cc" x="654" y="338" style="fill:#64798C">ningún campo obligatorio</text>
+        </svg>
+        <figcaption>Tablero, selección de causa y reanudación. Todo cabe en una pantalla de 10" sin scroll.</figcaption>
+      </figure>
+
+      <h3>Anatomía del tablero <span class="tag">lo que ve el operador al llegar</span></h3>
+      <ul>
+        <li><strong>Encabezado</strong> con turno, hora real, estado de la red y contador de pendientes.
+          El operador no necesita saber qué es una cola; necesita saber si su registro ya subió.</li>
+        <li><strong>Tarjetas por área</strong>, agrupadas en columnas. Cada tarjeta muestra el nombre corto
+          («Cinta 1»), el código y el estado en texto + ícono + color.</li>
+        <li><strong>Color + forma + palabra.</strong> Verde con triángulo = opera; rojo con cuadrado = parada
+          no planificada; ámbar con reloj = parada planificada. Un daltónico y una pantalla con reflejo
+          siguen entendiendo el estado.</li>
+        <li><strong>Rojo muestra causa y hora de inicio</strong>, no solo «detenida»: el supervisor que pasa
+          por detrás lo lee sin abrir nada.</li>
+      </ul>
+
+      <h3>Reglas de interacción <span class="tag">no negociables</span></h3>
+      <table>
+        <thead><tr><th style="width:26%">Regla</th><th>Detalle técnico</th></tr></thead>
+        <tbody>
+          <tr><td>Objetivo mínimo</td><td>96 × 96 px por botón (en una tablet de 10" a 1920 px de ancho, ~24 mm reales). Las tarjetas del tablero nunca bajan de 180 × 110 px.</td></tr>
+          <tr><td>Tipografía</td><td>Nombre de máquina ≥ 18 px; causa ≥ 20 px. Sin texto gris sobre color.</td></tr>
+          <tr><td>Sin gestos</td><td>Nada de swipe, long-press, doble toque ni arrastrar. Solo toques simples: los guantes y el agua hacen que los gestos fallen.</td></tr>
+          <tr><td>Sin scroll</td><td>Máximo 12 máquinas visibles por área en una pantalla. Si hay más, se parte por línea, no se agrega scroll.</td></tr>
+          <tr><td>Deshacer en vez de confirmar</td><td>Tras registrar aparece un aviso de 5 segundos con «Deshacer». Confirmar antes de actuar agrega un toque y entrena al operador a tocar «Sí» sin leer.</td></tr>
+          <tr><td>Comentario opcional y después</td><td>Nunca bloquea el registro. Se puede agregar al reanudar o desde el historial.</td></tr>
+          <tr><td>Sin teclado</td><td>El único campo de texto está colapsado y se abre a demanda; el teclado de la tablet ya trae dictado.</td></tr>
+          <tr><td>Feedback inmediato</td><td>Vibración corta + cambio de color en < 50 ms. No hay «guardando…» porque no se espera a la red.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Los 5 casos que hay que resolver (y cómo)</h3>
+      <table>
+        <thead><tr><th style="width:30%">Caso real</th><th>Comportamiento</th></tr></thead>
+        <tbody>
+          <tr><td>El operador toca la máquina equivocada</td><td>Aviso con «Deshacer» durante 5 s. Después de ese plazo, el supervisor puede anular con motivo desde el historial.</td></tr>
+          <tr><td>Doble toque en la causa (rebote)</td><td>La segunda petición devuelve la misma parada: el índice único y el UUID lo impiden. La UI no muestra error.</td></tr>
+          <tr><td>Se olvidan de reanudar</td><td>A los 30 min la tarjeta muestra un borde ámbar; a los 60 min se avisa al supervisor del turno. El cierre se puede corregir después.</td></tr>
+          <tr><td>La tablet se queda sin batería</td><td>Cargador fijo o PoE; la cola vive en disco, un reinicio no pierde eventos. Al arrancar se retoma la sincronización.</td></tr>
+          <tr><td>Cambio de turno con parada abierta</td><td>La parada queda abierta y se muestra en el turno nuevo. El turno se asigna por la hora de inicio, no por la de cierre.</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout info">
+        <div class="ic">UX</div>
+        <p><strong>Lo que se decidió no hacer:</strong> login por operador en cada parada (agrega 2 toques y
+          nadie lo hace), causa obligatoria con texto libre (produce «falla» y «no sé»), y listas de más de
+          6 causas por categoría (el operador toca la primera). Si se necesita saber <em>quién</em> registró,
+          se usa un lector de tarjeta en el turno, no un formulario por evento.</p>
+      </div>
+    </section>
+
+
+    <!-- ============================ 05 ============================ -->
+    <section id="analitica">
+      <div class="kicker"><div class="num">05</div><div class="lab">Historial y analítica</div></div>
+      <h2>Del registro al Pareto, sin planillas paralelas</h2>
+      <p>El historial no es un archivo muerto: es la herramienta con la que el supervisor cierra el turno.
+        Cada mañana revisa las paradas del día anterior, completa lo que el operador no alcanzó a escribir
+        y corrige horarios si hubo un error. Todo eso queda auditado y alimenta los mismos indicadores
+        que ve gerencia.</p>
+
+      <h3>Vista de historial <span class="tag">para supervisores</span></h3>
+      <div class="grid2">
+        <div class="card"><h4>Filtros</h4>
+          <p>Rango de fechas (por defecto «ayer»), área, máquina, turno, categoría, causa y estado
+            (en curso / cerrada / anulada). Un clic en la fila abre el detalle con los dos comentarios y el
+            historial de cambios.</p></div>
+        <div class="card"><h4>Edición controlada</h4>
+          <p>El supervisor corrige <em>hora de inicio/fin</em>, agrega <em>comentario de mantenimiento</em> y
+            anula con motivo. No puede cambiar la causa sin dejar rastro: cada campo modificado se guarda en
+            <code>registro_paradas_auditoria</code> con usuario, antes y después.</p></div>
+      </div>
+
+      <div class="filelabel"><b>05_historial.sql</b> — el JOIN que alimenta la tabla editable</div>
+<pre><span class="kw">select</span> p.id, p.fecha, p.turno, p.area, p.maquina,
+       p.causa, p.categoria, p.impacto,
+       to_char(p.hora_inicio <span class="kw">at time zone</span> <span class="st">'America/Punta_Arenas'</span>, <span class="st">'HH24:MI'</span>) <span class="kw">as</span> inicio,
+       to_char(p.hora_fin    <span class="kw">at time zone</span> <span class="st">'America/Punta_Arenas'</span>, <span class="st">'HH24:MI'</span>) <span class="kw">as</span> fin,
+       p.duracion_minutos, p.estado, p.comentarios_operador, p.comentarios_mantenimiento
+<span class="kw">from</span> v_paradas p
+<span class="kw">where</span> p.fecha <span class="kw">between</span> $1 <span class="kw">and</span> $2
+  <span class="kw">and</span> ($3::<span class="fn">int</span>  <span class="kw">is null or</span> p.area_id = $3)
+  <span class="kw">and</span> ($4::<span class="fn">int</span>  <span class="kw">is null or</span> p.maquina_id = $4)
+  <span class="kw">and</span> ($5::<span class="fn">text</span> <span class="kw">is null or</span> p.estado = $5)
+<span class="kw">order by</span> p.hora_inicio <span class="kw">desc</span>;</pre>
+
+      <h3>Indicadores <span class="tag">y su definición exacta</span></h3>
+      <table>
+        <thead><tr><th style="width:26%">Indicador</th><th style="width:34%">Fórmula</th><th>Para qué se usa</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Minutos de parada por máquina y turno</strong></td>
+              <td>Σ <code>duracion_minutos</code> de las paradas cerradas del turno</td>
+              <td>Saber dónde se fue el turno. Es el primer número que mira el jefe de producción.</td></tr>
+          <tr><td><strong>Disponibilidad por máquina</strong></td>
+              <td><code>1 − minutos_no_planificados / minutos_del_turno</code></td>
+              <td>Comparar máquinas entre sí y contra su histórico. Una cinta al 66% es una cinta que hay que intervenir.</td></tr>
+          <tr><td><strong>Disponibilidad de planta</strong></td>
+              <td>Se calcula en <strong>minutos-máquina</strong>: <code>1 − Σ paradas / (minutos_turno × nº máquinas)</code></td>
+              <td>Evita el error clásico de sumar paradas de 5 máquinas contra un turno de 720 minutos y obtener 150% de tiempo muerto.</td></tr>
+          <tr><td><strong>MTTR</strong></td>
+              <td>Promedio de duración de las fallas no planificadas</td>
+              <td>Qué tan rápido responde mantenimiento.</td></tr>
+          <tr><td><strong>MTBF</strong></td>
+              <td><code>(tiempo calendario − tiempo muerto) / nº fallas</code></td>
+              <td>Cada cuánto falla. Sirve para decidir reemplazo vs. reparación.</td></tr>
+          <tr><td><strong>Pareto de causas</strong></td>
+              <td>Σ minutos agrupados por causa, ordenados de mayor a menor, con % acumulado</td>
+              <td>Dónde atacar primero. Es la entrada de la reunión semanal de mejora.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Cómo se construye el Pareto</h3>
+      <ol>
+        <li>Filtrar un período (mes, semana, turno) y, opcionalmente, un área.</li>
+        <li>Excluir las causas planificadas: lavado de línea y cambio de producto no son tiempo muerto.</li>
+        <li>Agrupar por causa y sumar los minutos (no contar eventos: una causa frecuente y corta puede
+          importar menos que una rara y larga).</li>
+        <li>Ordenar de mayor a menor y calcular el porcentaje acumulado.</li>
+        <li>Cortar donde el acumulado llega a 80%: esas son las causas que explican la mayor parte del problema.</li>
+      </ol>
+
+      <div class="filelabel"><b>05_pareto.sql</b> — una llamada, todo el cálculo</div>
+<pre><span class="kw">select</span> posicion, causa, categoria, eventos, minutos, pct_tiempo, pct_acumulado
+<span class="kw">from</span> fn_pareto_causas(
+        <span class="st">'2026-10-26'</span>::<span class="fn">timestamptz</span>,
+        <span class="st">'2026-11-10'</span>::<span class="fn">timestamptz</span>,
+        <span class="kw">null</span>,     <span class="cm">-- área: todas</span>
+        <span class="kw">false</span>     <span class="cm">-- excluir causas planificadas</span>
+     );</pre>
+
+      <figure>
+        <svg viewBox="0 0 920 430" role="img" aria-label="Diagrama de Pareto de causas de parada">
+  <defs>
+    <linearGradient id="gHot" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#F5BE63"/><stop offset="100%" stop-color="#D98A28"/>
+    </linearGradient>
+    <style>
+      .ax{fill:#64798C;font:10.5px ui-monospace,monospace}
+      .val{fill:#C9D6E2;font:600 10px ui-monospace,monospace}
+      .lb{fill:#93A6B8;font:10.5px ui-sans-serif,system-ui}
+      .lg{fill:#93A6B8;font:11px ui-sans-serif,system-ui}
+      .tt{fill:#E8EFF6;font:600 12px ui-sans-serif,system-ui;letter-spacing:.4px}
+      .tt2{fill:#64798C;font:10px ui-sans-serif,system-ui;letter-spacing:1.2px}
+    </style>
+  </defs>
+  <line x1="58" y1="312" x2="862" y2="312" stroke="#1B2733" stroke-width="1"/><text x="48" y="316" text-anchor="end" class="ax">0</text><text x="872" y="316" class="ax">0%</text><line x1="58" y1="240.5" x2="862" y2="240.5" stroke="#1B2733" stroke-width="1"/><text x="48" y="244.5" text-anchor="end" class="ax">400</text><text x="872" y="244.5" class="ax">25%</text><line x1="58" y1="169" x2="862" y2="169" stroke="#1B2733" stroke-width="1"/><text x="48" y="173" text-anchor="end" class="ax">800</text><text x="872" y="173" class="ax">50%</text><line x1="58" y1="97.5" x2="862" y2="97.5" stroke="#1B2733" stroke-width="1"/><text x="48" y="101.5" text-anchor="end" class="ax">1200</text><text x="872" y="101.5" class="ax">75%</text><line x1="58" y1="26" x2="862" y2="26" stroke="#1B2733" stroke-width="1"/><text x="48" y="30" text-anchor="end" class="ax">1600</text><text x="872" y="30" class="ax">100%</text>
+  <line x1="58" y1="26" x2="58" y2="312" stroke="#2A3B4B"/>
+  <line x1="58" y1="312" x2="862" y2="312" stroke="#2A3B4B"/>
+  <rect x="72.5" y="34.6" width="51.5" height="277.4"
+             rx="2.5" fill="url(#gHot)"/><rect x="152.9" y="204.0" width="51.5" height="108.0"
+             rx="2.5" fill="url(#gHot)"/><rect x="233.3" y="226.9" width="51.5" height="85.1"
+             rx="2.5" fill="url(#gHot)"/><rect x="313.7" y="233.0" width="51.5" height="79.0"
+             rx="2.5" fill="#3A4C60"/><rect x="394.1" y="233.3" width="51.5" height="78.7"
+             rx="2.5" fill="#3A4C60"/><rect x="474.5" y="238.2" width="51.5" height="73.8"
+             rx="2.5" fill="#3A4C60"/><rect x="554.9" y="243.0" width="51.5" height="69.0"
+             rx="2.5" fill="#3A4C60"/><rect x="635.3" y="253.0" width="51.5" height="59.0"
+             rx="2.5" fill="#3A4C60"/><rect x="715.7" y="255.2" width="51.5" height="56.8"
+             rx="2.5" fill="#3A4C60"/><rect x="796.1" y="275.2" width="51.5" height="36.8"
+             rx="2.5" fill="#3A4C60"/><text x="98.2" y="28.6" text-anchor="middle" class="val">1552</text><text x="178.6" y="198.0" text-anchor="middle" class="val">604</text><text x="259.0" y="220.9" text-anchor="middle" class="val">476</text><text x="339.4" y="227.0" text-anchor="middle" class="val">442</text><text x="419.8" y="227.3" text-anchor="middle" class="val">440</text><text x="500.2" y="232.2" text-anchor="middle" class="val">413</text><text x="580.6" y="237.0" text-anchor="middle" class="val">386</text><text x="661.0" y="247.0" text-anchor="middle" class="val">330</text><text x="741.4" y="249.2" text-anchor="middle" class="val">318</text><text x="821.8" y="269.2" text-anchor="middle" class="val">206</text>
+  <line x1="58" y1="83.19999999999999" x2="862" y2="83.19999999999999" stroke="#E2564C" stroke-width="1.3" stroke-dasharray="5 4" opacity=".85"/>
+  <text x="358" y="74.19999999999999" style="fill:#E2564C;font:600 10.5px ui-sans-serif,system-ui">80% del tiempo muerto</text>
+  <polyline points="98.2,239.6 178.6,211.3 259.0,189.0 339.4,168.4 419.8,147.8 500.2,128.7 580.6,110.7 661.0,95.2 741.4,80.3 821.8,70.9" fill="none" stroke="#35C2A5" stroke-width="2.2" stroke-linejoin="round"/><circle cx="98.2" cy="239.6" r="3.4" fill="#0A0E13" stroke="#35C2A5" stroke-width="2"/><circle cx="178.6" cy="211.3" r="3.4" fill="#0A0E13" stroke="#35C2A5" stroke-width="2"/><circle cx="259.0" cy="189.0" r="3.4" fill="#0A0E13" stroke="#35C2A5" stroke-width="2"/><circle cx="339.4" cy="168.4" r="3.4" fill="#0A0E13" stroke="#35C2A5" stroke-width="2"/><circle cx="419.8" cy="147.8" r="3.4" fill="#0A0E13" stroke="#35C2A5" stroke-width="2"/><circle cx="500.2" cy="128.7" r="3.4" fill="#0A0E13" stroke="#35C2A5" stroke-width="2"/><circle cx="580.6" cy="110.7" r="3.4" fill="#0A0E13" stroke="#35C2A5" stroke-width="2"/><circle cx="661.0" cy="95.2" r="3.4" fill="#0A0E13" stroke="#35C2A5" stroke-width="2"/><circle cx="741.4" cy="80.3" r="3.4" fill="#0A0E13" stroke="#35C2A5" stroke-width="2"/><circle cx="821.8" cy="70.9" r="3.4" fill="#0A0E13" stroke="#35C2A5" stroke-width="2"/><text x="98.2" y="334" text-anchor="end" class="lb" transform="rotate(-38 98.2 334)">Corte de luz</text><text x="178.6" y="334" text-anchor="end" class="lb" transform="rotate(-38 178.6 334)">Falla de rodamiento</text><text x="259.0" y="334" text-anchor="end" class="lb" transform="rotate(-38 259.0 334)">Cinta trabada</text><text x="339.4" y="334" text-anchor="end" class="lb" transform="rotate(-38 339.4 334)">Correa cortada</text><text x="419.8" y="334" text-anchor="end" class="lb" transform="rotate(-38 419.8 334)">Variador en falla</text><text x="500.2" y="334" text-anchor="end" class="lb" transform="rotate(-38 500.2 334)">Motor quemado</text><text x="580.6" y="334" text-anchor="end" class="lb" transform="rotate(-38 580.6 334)">Espera de camión</text><text x="661.0" y="334" text-anchor="end" class="lb" transform="rotate(-38 661.0 334)">Falta de agua</text><text x="741.4" y="334" text-anchor="end" class="lb" transform="rotate(-38 741.4 334)">Baja presión de vapor</text><text x="821.8" y="334" text-anchor="end" class="lb" transform="rotate(-38 821.8 334)">Cortocircuito en tabl…</text>
+  <text x="58" y="14" class="tt">Minutos de parada por causa · 14 días</text>
+  <text x="862" y="14" text-anchor="end" class="tt2">BARRAS: MINUTOS · LÍNEA: % ACUMULADO</text>
+  <g transform="translate(58,408)">
+    <rect x="0" y="-8" width="10" height="10" rx="2" fill="url(#gHot)"/><text x="16" y="1" class="lg">Top 3 causas</text>
+    <rect x="104" y="-8" width="10" height="10" rx="2" fill="#3A4C60"/><text x="120" y="1" class="lg">Resto</text>
+    <line x1="176" y1="-3" x2="198" y2="-3" stroke="#35C2A5" stroke-width="2.2"/><text x="204" y="1" class="lg">% acumulado</text>
+  </g>
+</svg>
+        <figcaption>Datos reales de la base de demostración: 171 paradas en 14 días
+          (6.127 minutos de tiempo muerto, sin contar planificadas).</figcaption>
+      </figure>
+
+      <p>La lectura es directa: <strong>Corte de luz</strong> sola explica el 25.3% del tiempo perdido, y
+        <strong>9 causas de 18</strong> concentran el 80%. No hace falta un tablero con 40 gráficos:
+        hace falta que la reunión del lunes empiece por esas 9.</p>
+
+      <div class="grid3">
+        <div class="card"><div class="kpi">25.3<small>%</small></div><p>Corte de luz — la causa que más tiempo consumió en el período.</p></div>
+        <div class="card"><div class="kpi">9<small> / 18</small></div><p>Causas que explican el 80% del tiempo muerto.</p></div>
+        <div class="card"><div class="kpi">33.6<small> min</small></div><p>MTTR de la máquina con más fallas (Cinta de recepción).</p></div>
+      </div>
+
+      <h3>Del Pareto a la acción</h3>
+      <table>
+        <thead><tr><th style="width:24%">Patrón que aparece</th><th style="width:30%">Qué significa</th><th>Acción típica</th></tr></thead>
+        <tbody>
+          <tr><td>Una causa de servicios básicos lidera</td><td>El problema no está en la línea: está en la infraestructura (luz, agua, vapor).</td><td>Tablero eléctrico y respaldo; medir cortes con la empresa distribuidora. La app entrega la evidencia con fechas y minutos.</td></tr>
+          <tr><td>Muchas causas mecánicas cortas</td><td>Falta mantenimiento preventivo o el operador fuerza la máquina.</td><td>Plan de lubricación/ajuste y revisión del procedimiento de arranque.</td></tr>
+          <tr><td>Una sola máquina concentra el tiempo</td><td>Equipo al final de su vida útil o mal instalado.</td><td>Análisis de reemplazo con MTBF y costo por hora detenida.</td></tr>
+          <tr><td>Paradas logísticas crecientes</td><td>El cuello de botella se movió aguas arriba.</td><td>Revisar programación de camiones y stock intermedio.</td></tr>
+        </tbody>
+      </table>
+
+      <div class="callout ok">
+        <div class="ic">DATO</div>
+        <p>En la muestra, la <strong>Cinta Transportadora 1</strong> quedó con 91.2% de disponibilidad:
+          pierde 63 minutos por turno de 720. Ese número, repetido tres semanas, justifica sola una
+          intervención de mantenimiento.</p>
+      </div>
+    </section>
+
+    <!-- ============================ 06 ============================ -->
+    <section id="hardware">
+      <div class="kicker"><div class="num">06</div><div class="lab">Hardware en planta</div></div>
+      <h2>El equipo se elige por el lavado, no por la ficha comercial</h2>
+      <p>La tablet vive a un metro de una cinta, con agua a presión, escamas, sal y frío. Un iPad en una funda
+        de silicona dura un mes. El criterio de compra no es «la más resistente del catálogo», sino
+        <strong>qué pasa cuando alguien lava la línea con la hidrolavadora a 90 bar y 80 °C</strong>.</p>
+
+      <table>
+        <thead><tr><th style="width:22%">Requisito</th><th style="width:30%">Especificación mínima</th><th>Por qué</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Protección</strong></td><td><strong>IP69K</strong> (no IP67) + IK08</td>
+              <td>IP67 resiste inmersión; IP69K resiste chorro a presión y alta temperatura. En zonas de lavado es obligatorio. IP65/IP67 solo en áreas secas (empaque secundario, oficina de turno).</td></tr>
+          <tr><td><strong>Material</strong></td><td>Acero inoxidable 316L, sin ranuras ni tornillos expuestos</td>
+              <td>El 304 se pica con la salmuera. Sin superficies donde se acumule materia orgánica.</td></tr>
+          <tr><td><strong>Pantalla</strong></td><td>10–12", 1000–1200 nits, antirreflejo, vidrio templado 3 mm</td>
+              <td>En una planta con vapor y ventanales, 400 nits es ilegible. El vidrio templado sobrevive golpes de bandeja.</td></tr>
+          <tr><td><strong>Táctil</strong></td><td>Capacitivo con <em>glove mode</em> (guante de 2 mm) o resistivo si hay agua permanente</td>
+              <td>El capacitivo común no detecta guantes de PVC. Con agua goteando puede dar toques fantasma: hay que poder desactivar el multitáctil.</td></tr>
+          <tr><td><strong>Procesador</strong></td><td>Fanless (sin ventilador), 4 núcleos, 4 GB RAM, 64 GB</td>
+              <td>Un ventilador aspira escamas y humedad: es la falla número uno de los equipos "industriales" baratos.</td></tr>
+          <tr><td><strong>Sistema</strong></td><td>Android 12+ o Windows 11 IoT, en modo kiosco</td>
+              <td>Kiosco evita que el operador salga de la app, cambie la hora o instale cosas.</td></tr>
+          <tr><td><strong>Energía</strong></td><td>PoE+ o 24 V DC; batería 6–8 h si es tablet</td>
+              <td>PoE evita el cargador con cable colgando sobre una línea de fileteo.</td></tr>
+          <tr><td><strong>Red</strong></td><td>Wi-Fi 5/6, antena externa, 802.11r/k/v, banda 5 GHz</td>
+              <td>El roaming entre AP es lo que evita cortes al caminar con la tablet. 2,4 GHz está saturado en planta.</td></tr>
+          <tr><td><strong>Temperatura</strong></td><td>−10 a +50 °C, 95% HR condensante</td>
+              <td>Cámara de congelado y sala de máquinas en el mismo turno.</td></tr>
+          <tr><td><strong>Montaje</strong></td><td>Brazo articulado IP69K, VESA 75/100, liberación rápida</td>
+              <td>Altura 1,2–1,4 m, inclinación 15°, fuera del radio de giro de carros y bandejas.</td></tr>
+          <tr><td><strong>Identificación</strong></td><td>Lector NFC/RFID opcional</td>
+              <td>Registrar el turno con la tarjeta del operador sin teclear nada.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Dos configuraciones según la zona</h3>
+      <div class="grid2">
+        <div class="card"><h4>Zona de lavado (fileteo, recepción, empaque)</h4>
+          <p><strong>Panel PC industrial IP69K de 10–12"</strong> atornillado a un brazo, alimentado por PoE.
+             Sin batería que cargar, sin funda que se rompa, sin tablet que alguien se lleve. Es la opción que
+             menos mantenimiento pide en zonas mojadas.</p></div>
+        <div class="card"><h4>Zona seca / supervisor</h4>
+          <p><strong>Tablet rugged IP67</strong> con funda y correa, batería reemplazable. Más barata y móvil,
+             sirve para el jefe de turno que se desplaza entre áreas y para el conteo de inventario.</p></div>
+      </div>
+
+      <h3>Red y montaje: lo que se subestima</h3>
+      <ul>
+        <li><strong>Cobertura medida, no estimada:</strong> −65 dBm en cada puesto de trabajo, con el equipo
+          encendido y la cámara cerrada. Un AP por cada 2–3 máquinas en zonas húmedas; nunca dentro de la
+          cámara de congelado.</li>
+        <li><strong>VLAN separada</strong> para las tablets y QoS para el tráfico de sincronización: la red de
+          planta no debe competir con el video o el ERP.</li>
+        <li><strong>DHCP reservado</strong> por equipo: si una tablet cambia de IP, el diagnóstico se vuelve
+          adivinanza.</li>
+        <li><strong>Cableado por canaleta IP69</strong> y prensaestopas M12; nada de enchufes a media altura
+          sobre una línea que se lava.</li>
+      </ul>
+
+      <div class="callout warn">
+        <div class="ic">ATEX</div>
+        <p>La sala de compresores de amoníaco es atmósfera potencialmente explosiva. <strong>Ahí no va una
+          tablet común ni un panel PC estándar</strong>: se usa equipo certificado para la zona (o se deja el
+          registro fuera del recinto, con la máquina visible desde la puerta). Es el único punto del proyecto
+          donde la norma manda sobre la ergonomía.</p>
+      </div>
+
+      <h3>Mantenimiento del parque</h3>
+      <table>
+        <thead><tr><th style="width:20%">Frecuencia</th><th>Tarea</th></tr></thead>
+        <tbody>
+          <tr><td>Cada turno</td><td>Paño húmedo en pantalla; verificar que el cable no quedó tirante.</td></tr>
+          <tr><td>Semanal</td><td>Revisión visual de sellos y del brazo; limpiar rejilla de ventilación del panel.</td></tr>
+          <tr><td>Mensual</td><td>Prueba de táctil con guante, calibración si corresponde, revisar el contador de pendientes de sincronización.</td></tr>
+          <tr><td>Trimestral</td><td>Reapriete de soportes, prueba de lavado controlado, actualización de la app.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ============================ 07 ============================ -->
+    <section id="plan">
+      <div class="kicker"><div class="num">07</div><div class="lab">Plan de implementación</div></div>
+      <h2>Ocho semanas, con el piloto antes del rollout</h2>
+      <table>
+        <thead><tr><th style="width:12%">Semana</th><th style="width:30%">Entregable</th><th>Criterio de aceptación</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">1–2</td><td>Catálogos, autenticación y tablero de solo lectura</td>
+              <td>La tablet muestra las 4 áreas y el estado real de cada máquina cargado desde Neon.</td></tr>
+          <tr><td class="mono">3–4</td><td>Abrir/cerrar parada + offline completo</td>
+              <td>Prueba de 48 h en modo avión sin pérdida de eventos; doble envío no duplica.</td></tr>
+          <tr><td class="mono">5</td><td>Historial, correcciones y auditoría</td>
+              <td>Un supervisor corrige una hora y el cambio queda con usuario y diff.</td></tr>
+          <tr><td class="mono">6</td><td>Pareto, disponibilidad, MTBF y exportación CSV</td>
+              <td>Los números cuadran contra el conteo manual de una semana.</td></tr>
+          <tr><td class="mono">7</td><td>Piloto en Fileteo (2 tablets)</td>
+              <td>Cobertura ≥ 90% de las paradas reales del área, medidas contra el parte de producción.</td></tr>
+          <tr><td class="mono">8</td><td>Rollout a las 4 áreas + capacitación</td>
+              <td>30 minutos por turno; catálogo de causas consensuado con supervisores.</td></tr>
+        </tbody>
+      </table>
+
+      <p class="small">Equipo mínimo: 1 desarrollador full-stack, 0,5 de UX y 0,5 de QA. El cuello de botella
+        real no es el código: es la <strong>definición del catálogo de causas</strong> con los supervisores.
+        Ese taller debería ocurrir en la semana 1, no en la 7.</p>
+
+      <h3>Riesgos y mitigación</h3>
+      <table>
+        <thead><tr><th style="width:30%">Riesgo</th><th style="width:12%">Impacto</th><th>Mitigación</th></tr></thead>
+        <tbody>
+          <tr><td>Los operadores no cierran las paradas</td><td>Alto</td><td>Aviso a los 30 y 60 min, corrección por supervisor y KPI de calidad de registro por turno.</td></tr>
+          <tr><td>Catálogo de causas mal definido</td><td>Alto</td><td>Taller con supervisores antes de codificar; máximo 6 causas por categoría; revisión mensual por frecuencia de uso real.</td></tr>
+          <tr><td>Relojes desfasados</td><td>Medio</td><td>NTP, modo kiosco y detección de desfase > 2 min con aviso.</td></tr>
+          <tr><td>Wi-Fi inestable</td><td>Medio</td><td>Offline real + monitoreo de la cola por tablet; el indicador de «pendientes» es también una alerta de red.</td></tr>
+          <tr><td>Equipo sin certificación ATEX en sala de compresores</td><td>Alto</td><td>Excluir el recinto del plan de instalación; registrar desde el acceso.</td></tr>
+          <tr><td>Datos de demostración en producción</td><td>Bajo</td><td><code>sql/reset_demo.sql</code> deja la base vacía en un comando.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ============================ 08 ============================ -->
+    <section id="anexos">
+      <div class="kicker"><div class="num">08</div><div class="lab">Anexos</div></div>
+      <h2>Portabilidad, operación y puesta en marcha</h2>
+
+      <h3>8.1 · Si hubiera que usar MySQL 8</h3>
+      <table>
+        <thead><tr><th class="mono">PostgreSQL</th><th class="mono">MySQL equivalente</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">timestamptz</td><td class="mono">TIMESTAMP (guardar en UTC) + CONVERT_TZ al leer</td></tr>
+          <tr><td class="mono">índice único parcial</td><td class="mono">columna generada maquina_activa = IF(estado='activa', maquina_id, NULL) + UNIQUE</td></tr>
+          <tr><td class="mono">uuid + gen_random_uuid()</td><td class="mono">CHAR(36) o BINARY(16) + UUID() generado en el cliente</td></tr>
+          <tr><td class="mono">jsonb</td><td class="mono">JSON</td></tr>
+          <tr><td class="mono">plpgsql</td><td class="mono">stored procedures con DELIMITER y manejadores de error</td></tr>
+          <tr><td class="mono">filter (where …)</td><td class="mono">SUM(CASE WHEN … THEN … END)</td></tr>
+          <tr><td class="mono">return query / returns table</td><td class="mono">procedimientos con tabla temporal + SELECT final</td></tr>
+        </tbody>
+      </table>
+      <p class="small">El pareto y las ventanas analíticas funcionan igual desde MySQL 8.0. Lo que se pierde
+        son los índices parciales y las funciones que devuelven conjuntos, que es justo donde vive la lógica
+        de sincronización.</p>
+
+      <h3>8.2 · Autenticación y permisos</h3>
+      <ul>
+        <li><strong>Operador:</strong> la tablet se desbloquea con PIN de turno. El token dura 12 h y no da
+          acceso a escritura fuera de <code>/api/paradas</code> y <code>/api/sync</code>.</li>
+        <li><strong>Supervisor:</strong> usuario y clave, token de 8 h, acceso a historial y correcciones.</li>
+        <li><strong>Administrador:</strong> catálogos y usuarios. Toda escritura de catálogo queda auditada.</li>
+        <li>Si más adelante hay varias plantas, se agrega <code>planta_id</code> a áreas y turnos y se filtra por
+          token. El esquema actual no lo impide.</li>
+      </ul>
+
+      <h3>8.3 · Operación de la base en Neon</h3>
+      <ul>
+        <li><strong>Rama <code>main</code></strong> = producción. <strong>Rama de staging</strong> creada desde
+          main para probar migraciones: si algo falla, se descarta sin tocar producción.</li>
+        <li><strong>Migraciones</strong> versionadas en el repo (<code>sql/migrations/</code>) y aplicadas por CI.</li>
+        <li><strong>Respaldo:</strong> Neon hace point-in-time restore; además, un <code>pg_dump</code> semanal
+          a almacenamiento externo (barato y auditable).</li>
+        <li><strong>Pooling:</strong> la app usa el endpoint <code>-pooler</code>; las migraciones, el directo.</li>
+        <li><strong>Monitoreo:</strong> alerta si la tabla <code>dispositivos</code> muestra un equipo con
+          <code>pendientes &gt; 0</code> por más de 30 minutos (red caída o tablet abandonada).</li>
+      </ul>
+
+      <h3>8.4 · Puesta en marcha en 4 comandos</h3>
+<pre><span class="cm"># 1. crear el esquema (una vez)</span>
+psql <span class="st">"$DATABASE_URL"</span> -f sql/esquema_paradas.sql
+
+<span class="cm"># 2. cargar datos de demostración (opcional)</span>
+psql <span class="st">"$DATABASE_URL"</span> -f sql/semilla_demo.sql
+
+<span class="cm"># 3. verificar que todo cumple las reglas</span>
+node sql/pruebas.js          <span class="cm"># 16 pruebas, 0 fallas</span>
+
+<span class="cm"># 4. dejar la base limpia para operar</span>
+psql <span class="st">"$DATABASE_URL"</span> -f sql/reset_demo.sql
+psql <span class="st">"$DATABASE_URL"</span> -f sql/esquema_paradas.sql</pre>
+
+      <div class="callout ok">
+        <div class="ic">LISTO</div>
+        <p>El esquema ya está aplicado en <strong>Neon · OEE. PROCESOS</strong> (AWS São Paulo, PostgreSQL 18.6),
+          con datos de demostración cargados y 16/16 pruebas pasando. Falta el frontend y el piloto físico.</p>
+      </div>
+    </section>
+
+    <div class="foot">
+      Propuesta técnica v1.0 · Registro de paradas de planta · Documento generado junto con el esquema SQL
+      desplegado y verificado en Neon.
+    </div>
+
+    </main>
+  </div>
+</div>
+</body>
+</html>

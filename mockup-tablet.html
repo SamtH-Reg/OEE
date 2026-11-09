@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tablero de Planta · mockup de los 2 clics</title>
+<style>
+  :root{
+    --bg:#080B0F; --panel:#10161D; --panel2:#151D26; --line:#22303D;
+    --ink:#EAF1F7; --muted:#8FA3B5; --dim:#5C7185;
+    --ok:#1F8A55; --ok-line:#2FBE78; --stop:#B5372F; --stop-line:#E2564C;
+    --plan:#7A5B14; --warn:#D9A03C; --accent:#F0A93B;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%}
+  body{background:#05080B;color:var(--ink);font-family:ui-sans-serif,system-ui,"Segoe UI",Roboto,Arial,sans-serif;
+       display:flex;align-items:center;justify-content:center;padding:24px;overflow:hidden}
+
+  /* marco de tablet 16:10 */
+  .device{position:relative;width:min(1360px,100%);aspect-ratio:16/10;background:var(--bg);
+          border:10px solid #1b232c;border-radius:26px;box-shadow:0 40px 90px -30px #000,0 0 0 1px #000 inset;
+          overflow:hidden;display:flex;flex-direction:column}
+  header{height:76px;flex:0 0 auto;display:flex;align-items:center;gap:14px;padding:0 18px;min-width:0;
+         background:linear-gradient(#0f151c,#0b1016);border-bottom:1px solid var(--line)}
+  .brand{display:flex;align-items:center;gap:12px}
+  .dotmark{width:26px;height:26px;border-radius:7px;background:var(--accent);
+           box-shadow:0 0 18px rgba(240,169,59,.35)}
+  .brand b{font-size:clamp(14px,1.7vw,19px);letter-spacing:.3px;white-space:nowrap}
+  .brand span{display:block;font-size:clamp(8px,.95vw,11px);color:var(--muted);letter-spacing:1.2px;text-transform:uppercase;
+              white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:210px}
+  .clock{margin-left:auto;text-align:right;line-height:1.05}
+  .clock b{font-size:clamp(20px,2.6vw,32px);font-variant-numeric:tabular-nums;letter-spacing:.5px}
+  .clock span{display:block;font-size:clamp(9px,1vw,11.5px);color:var(--muted);letter-spacing:1.2px;text-transform:uppercase}
+  .net{display:flex;align-items:center;gap:7px;padding:8px 11px;border:1px solid var(--line);border-radius:11px;
+       background:#0d1319;font-size:clamp(10px,1.05vw,13px);color:var(--muted);white-space:nowrap}
+  .net i{width:10px;height:10px;border-radius:50%;background:var(--ok-line);box-shadow:0 0 10px var(--ok-line)}
+  .net.off i{background:var(--warn);box-shadow:0 0 10px var(--warn)}
+  .net b{color:var(--ink);font-size:14px}
+
+  main{flex:1;display:grid;grid-template-columns:92px 1fr;min-height:0}
+  .rail{display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px 0;border-right:1px solid var(--line);background:#0a0f14}
+  .rail .lab{writing-mode:vertical-rl;transform:rotate(180deg);font-size:11px;letter-spacing:3px;color:var(--dim);text-transform:uppercase}
+  .board{padding:14px 18px 16px;display:grid;grid-template-columns:repeat(4,1fr);gap:14px;min-height:0;height:100%}
+
+  .area{display:flex;flex-direction:column;gap:9px;min-width:0;min-height:0}
+  .area h2{margin:0;font-size:12px;letter-spacing:2.2px;color:var(--dim);text-transform:uppercase;font-weight:600;
+           display:flex;align-items:center;gap:8px}
+  .area h2 em{font-style:normal;color:var(--muted);letter-spacing:0}
+  .tile{position:relative;border:0;border-radius:14px;padding:12px 13px;text-align:left;cursor:pointer;
+        color:#fff;font-family:inherit;display:flex;flex-direction:column;justify-content:space-between;
+        flex:1 1 0;min-height:52px;transition:transform .12s ease,box-shadow .12s ease,background .25s ease}
+  .tile:active{transform:scale(.975)}
+  .tile .code{font-size:11px;letter-spacing:1.6px;opacity:.75;font-variant-numeric:tabular-nums}
+  .tile .name{font-size:clamp(13px,1.32vw,18px);line-height:1.15;font-weight:650;letter-spacing:.1px;
+              display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .tile .state{display:flex;align-items:center;gap:7px;font-size:12.5px;opacity:.92}
+  .tile .state svg{width:13px;height:13px;flex:0 0 auto}
+  .tile.run{background:linear-gradient(160deg,#1d7a4b,#155c39);box-shadow:0 0 0 1px #2f9d63 inset,0 10px 24px -18px #000}
+  .tile.run:hover{background:linear-gradient(160deg,#228755,#176640)}
+  .tile.stop{background:linear-gradient(160deg,#b2352d,#8d2620);box-shadow:0 0 0 1px #e2564c inset,0 0 34px -12px rgba(226,86,76,.5)}
+  .tile.stop .pending{position:absolute;top:10px;right:11px;width:9px;height:9px;border-radius:50%;background:#ffd7d3;
+                      animation:pulse 1.6s infinite}
+  @keyframes pulse{0%,100%{opacity:.4;transform:scale(.85)}50%{opacity:1;transform:scale(1.15)}}
+  .tile.plan{background:linear-gradient(160deg,#7a5b14,#5d450f);box-shadow:0 0 0 1px #a87f26 inset}
+  .tile.pending-sync{opacity:.92}
+  .tile.pending-sync::after{content:"";position:absolute;left:0;right:0;bottom:0;height:3px;border-radius:0 0 14px 14px;
+                             background:repeating-linear-gradient(90deg,var(--warn) 0 6px,#0000 6px 12px);opacity:.85}
+
+  .hint{display:flex;gap:9px;align-items:center;padding:8px 12px;white-space:nowrap;border-radius:11px;background:#0d1319;
+        border:1px solid var(--line);color:var(--muted);font-size:12.5px;margin-left:22px}
+  .hint b{color:var(--ink)}
+  .hint kbd{background:#1b252f;border:1px solid #2b3a47;border-radius:6px;padding:2px 7px;font:600 12px ui-monospace,monospace;color:#fff}
+
+  /* paneles */
+  .sheet{position:absolute;inset:0;background:#070b0ff5;backdrop-filter:blur(4px);display:none;
+         flex-direction:column;padding:22px 26px;z-index:5}
+  .sheet.open{display:flex;animation:fade .16s ease}
+  @keyframes fade{from{opacity:0}to{opacity:1}}
+  .sheet .top{display:flex;align-items:center;gap:16px;margin-bottom:16px}
+  .sheet .top h3{margin:0;font-size:22px;letter-spacing:.2px}
+  .sheet .top .sub{color:var(--muted);font-size:13.5px}
+  .x{margin-left:auto;background:#141c24;border:1px solid var(--line);color:var(--muted);border-radius:12px;
+     width:52px;height:52px;font-size:22px;cursor:pointer}
+  .cats{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;height:min(58vh,380px);margin:auto 0;flex:0 0 auto}
+  .cat{border:1px solid #2a3947;border-radius:16px;background:linear-gradient(165deg,#141d26,#0e151c);
+       color:var(--ink);cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;
+       gap:14px;font-family:inherit;padding:18px 10px;transition:.14s}
+  .cat:hover{border-color:#3b5266;background:linear-gradient(165deg,#1a2530,#111922);transform:translateY(-2px)}
+  .cat svg{width:46px;height:46px;stroke:var(--accent);fill:none;stroke-width:1.7}
+  .cat b{font-size:19px;font-weight:600;letter-spacing:.2px}
+  .cat small{color:var(--dim);font-size:12px}
+
+  .causes{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;align-content:start;max-height:min(66vh,430px);margin:auto 0;overflow:auto;flex:0 0 auto}
+  .cause{border:1px solid #2a3947;border-radius:14px;background:#121a22;color:var(--ink);font-family:inherit;
+         text-align:left;padding:18px 20px;font-size:19px;cursor:pointer;display:flex;align-items:center;gap:14px;
+         min-height:76px}
+  .cause:hover{border-color:#3b5266;background:#16202a}
+  .cause span{width:34px;height:34px;border-radius:9px;background:#1d2833;display:grid;place-items:center;
+              font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;flex:0 0 auto}
+  .cause.plan{border-color:#5d450f}
+  .cause.plan .tag{font-size:10.5px;letter-spacing:1px;text-transform:uppercase;color:var(--warn);border:1px solid #6b5215;
+                   padding:3px 7px;border-radius:6px;margin-left:auto}
+
+  .resume{display:flex;flex-direction:column;justify-content:center;align-items:center;gap:18px;flex:1}
+  .resume .info{text-align:center;color:var(--muted);font-size:15px;line-height:1.6}
+  .resume .info b{color:var(--ink);font-size:24px;display:block;margin-bottom:4px}
+  .resume .timer{font-size:64px;font-variant-numeric:tabular-nums;letter-spacing:1px;color:#fff;line-height:1}
+  .btn-go{border:0;border-radius:18px;background:linear-gradient(160deg,#1f8a55,#166b41);color:#fff;font-family:inherit;
+          font-size:27px;font-weight:650;padding:30px 64px;min-width:520px;cursor:pointer;
+          box-shadow:0 0 0 1px #34b478 inset,0 26px 60px -30px #2fbe78}
+  .btn-go:hover{filter:brightness(1.08)}
+  .comment{margin-top:8px;width:620px;max-width:100%;display:none}
+  .comment.open{display:block}
+  .comment textarea{width:100%;height:86px;resize:none;border-radius:12px;border:1px solid var(--line);
+                    background:#0e151c;color:var(--ink);font:16px/1.45 inherit;padding:12px 14px}
+  .comment button.ghost{background:none;border:0;color:var(--muted);font:inherit;font-size:13.5px;margin-top:8px;cursor:pointer;text-decoration:underline}
+
+  .toast{position:absolute;left:50%;bottom:26px;transform:translate(-50%,20px);opacity:0;pointer-events:none;
+         background:#111a22;border:1px solid #2b3a47;border-radius:14px;padding:14px 18px;display:flex;gap:16px;
+         align-items:center;box-shadow:0 24px 60px -20px #000;transition:.22s;z-index:9;min-width:520px}
+  .toast.show{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+  .toast .t{font-size:14.5px}
+  .toast .t b{display:block;font-size:16px;margin-bottom:3px}
+  .toast .t small{color:var(--muted)}
+  .toast button{margin-left:auto;background:#1c2731;border:1px solid #33455a;color:#fff;border-radius:10px;
+                padding:11px 16px;font:600 14px inherit;cursor:pointer}
+  .toast .bar{position:absolute;left:0;bottom:0;height:3px;background:var(--accent);border-radius:0 0 14px 14px;width:100%}
+
+  .footnote{position:absolute;left:0;right:0;bottom:-34px;text-align:center;font-size:12px;color:#4b5c6b}
+  @media (max-width:1000px){ .hint{display:none} }
+  @media (max-width:900px){ .brand span{max-width:130px} }
+</style>
+</head>
+<body>
+<div class="device">
+  <header>
+    <div class="brand">
+      <div class="dotmark"></div>
+      <div><b>Tablero de Planta</b><span>Fileteo · Turno Día · Sup. Turno</span></div>
+    </div>
+    <div class="hint"><kbd>1</kbd> toca la máquina <b>·</b> <kbd>2</kbd> toca la causa</div>
+    <div class="net" id="net"><i></i><span>Wi-Fi</span> <b>OK</b><span style="color:var(--dim)">|</span><span id="q">0 pendientes</span></div>
+    <div class="clock"><b id="clk">09:42</b><span id="dt">lun 09 nov</span></div>
+  </header>
+
+  <main>
+    <div class="rail"><div class="lab">Planta 1</div></div>
+    <div class="board" id="board"></div>
+  </main>
+
+
+  <!-- panel de categorías -->
+  <section class="sheet" id="sheetCat">
+    <div class="top">
+      <div>
+        <h3 id="catTitle">Cinta Transportadora 1</h3>
+        <div class="sub" id="catSub">¿Qué la detuvo? · toca una categoría</div>
+      </div>
+      <button class="x" data-close>✕</button>
+    </div>
+    <div class="cats" id="cats"></div>
+  </section>
+
+  <!-- panel de causas -->
+  <section class="sheet" id="sheetCause">
+    <div class="top">
+      <button class="x" style="margin-left:0;margin-right:14px" id="back">←</button>
+      <div>
+        <h3 id="causeTitle">Mecánica</h3>
+        <div class="sub" id="causeSub">Cinta Transportadora 1 · elige la causa</div>
+      </div>
+      <button class="x" data-close>✕</button>
+    </div>
+    <div class="causes" id="causes"></div>
+  </section>
+
+  <!-- panel de reanudación -->
+  <section class="sheet" id="sheetResume">
+    <div class="top">
+      <div>
+        <h3 id="resTitle">Cinta Transportadora 1</h3>
+        <div class="sub" id="resSub">Parada en curso</div>
+      </div>
+      <button class="x" data-close>✕</button>
+    </div>
+    <div class="resume">
+      <div class="info">
+        <b id="resCause">Cinta trabada</b>
+        <span id="resSince">desde 09:42</span>
+      </div>
+      <div class="timer" id="resTimer">00:00</div>
+      <button class="btn-go" id="btnResume">▶ &nbsp;Reanudar operación</button>
+      <div class="comment" id="commentBox">
+        <textarea id="commentTxt" placeholder="Comentario (opcional)"></textarea>
+        <button class="ghost" id="saveComment">Guardar comentario</button>
+      </div>
+      <button class="ghost" id="toggleComment"
+              style="background:none;border:0;color:var(--muted);font:inherit;font-size:14px;text-decoration:underline;cursor:pointer">
+        + Agregar comentario
+      </button>
+    </div>
+  </section>
+
+  <div class="toast" id="toast">
+    <div class="t"><b id="toastTitle"></b><small id="toastSub"></small></div>
+    <button id="toastUndo">Deshacer</button>
+    <div class="bar" id="toastBar"></div>
+  </div>
+</div>
+
+<script>
+const AREAS = [
+  { nombre:'Recepción', maquinas:[
+    { id:'BAL-01', nombre:'Balanza', largo:'Balanza de recepción', estado:'run' },
+    { id:'BOM-01', nombre:'Bomba agua mar', largo:'Bomba de agua de mar', estado:'run' },
+    { id:'CIN-R1', nombre:'Cinta recepción', largo:'Cinta de recepción', estado:'run' } ]},
+  { nombre:'Fileteo', maquinas:[
+    { id:'DES-01', nombre:'Desvisceradora', estado:'run' },
+    { id:'CIN-01', nombre:'Cinta 1', largo:'Cinta Transportadora 1', estado:'stop', causa:'Cinta trabada', desde:'09:42' },
+    { id:'CIN-02', nombre:'Cinta 2', largo:'Cinta Transportadora 2', estado:'run' },
+    { id:'FIL-01', nombre:'Fileteadora', largo:'Fileteadora automática', estado:'run' } ]},
+  { nombre:'Congelado', maquinas:[
+    { id:'TUN-02', nombre:'Túnel 2', largo:'Túnel de congelado 2', estado:'run' },
+    { id:'TUN-03', nombre:'Túnel 3', largo:'Túnel de congelado 3', estado:'run' },
+    { id:'COM-01', nombre:'Compresor NH₃', largo:'Compresor de amoníaco', estado:'run' } ]},
+  { nombre:'Empaque', maquinas:[
+    { id:'EMP-01', nombre:'Empacadora', largo:'Empacadora al vacío', estado:'run' },
+    { id:'ETI-01', nombre:'Etiquetadora', estado:'plan', causa:'Lavado de línea', desde:'09:10' },
+    { id:'DET-01', nombre:'Detector metales', largo:'Detector de metales', estado:'run' } ]}
+];
+
+const CATS = [
+  { id:'MEC', nombre:'Mecánica', icono:'gear', causas:[
+    ['Cinta trabada'], ['Motor quemado'], ['Falla de rodamiento'], ['Correa cortada'], ['Fuga de aceite'] ]},
+  { id:'ELE', nombre:'Eléctrica', icono:'bolt', causas:[
+    ['Variador en falla'], ['Sensor desalineado'], ['Cortocircuito en tablero'], ['Falla de contacto'] ]},
+  { id:'SRV', nombre:'Servicios', icono:'drop', causas:[
+    ['Corte de luz'], ['Falta de agua'], ['Baja presión de vapor'], ['Falla de aire comprimido'] ]},
+  { id:'OPE', nombre:'Operativa', icono:'wrench', causas:[
+    ['Lavado de línea', true], ['Cambio de producto', true], ['Falta de personal'], ['Ajuste de máquina'] ]},
+  { id:'LOG', nombre:'Logística', icono:'truck', causas:[
+    ['Espera de camión'], ['Falta de materia prima'], ['Espera de envases'] ]}
+];
+
+const ICONS = {
+  gear:'<path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/>',
+  bolt:'<path d="M13 2 4.1 12.8a.7.7 0 0 0 .5 1.2H10l-1 8 8.9-10.8a.7.7 0 0 0-.5-1.2H13Z"/>',
+  drop:'<path d="M12 2.5 6.6 9.2a7 7 0 1 0 10.8 0L12 2.5Z"/>',
+  wrench:'<path d="M20.7 3.3a5.5 5.5 0 0 1-6.7 7.1L4.6 19.8a2.2 2.2 0 0 1-3.1-3.1l9.4-9.4a5.5 5.5 0 0 1 7.1-6.7l-3 3 2.3 2.3 3-3Z"/>',
+  truck:'<path d="M2 7h11v9H2zM13 10h4l4 4v2h-8z"/><circle cx="6" cy="18" r="1.8"/><circle cx="17.5" cy="18" r="1.8"/>'
+};
+
+let maquinaSel = null, catSel = null, undo = null, pendientes = 0;
+
+const board = document.getElementById('board');
+function pintar(){
+  board.innerHTML = '';
+  for(const a of AREAS){
+    const col = document.createElement('div');
+    col.className = 'area';
+    col.innerHTML = `<h2>${a.nombre} <em>${a.maquinas.length}</em></h2>`;
+    for(const m of a.maquinas){
+      const b = document.createElement('button');
+      b.className = 'tile ' + m.estado + (m.pendiente ? ' pending-sync' : '');
+      b.innerHTML = `
+        <div>
+          <div class="code">${m.id}</div>
+          <div class="name">${m.nombre}</div>
+        </div>
+        <div class="state">${m.estado === 'stop'
+            ? '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>'
+            : m.estado === 'plan'
+              ? '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm1 5v5.6l4 2.3-.9 1.6-5.1-3V7Z"/></svg>'
+              : '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>'}
+          <span>${m.estado === 'run' ? 'Operando' : m.estado === 'stop' ? m.causa + ' · ' + m.desde : m.causa}</span></div>
+        ${m.estado === 'stop' ? '<div class="pending"></div>' : ''}`;
+      b.onclick = () => abrir(m);
+      col.appendChild(b);
+    }
+    board.appendChild(col);
+  }
+  document.getElementById('q').textContent = pendientes + (pendientes === 1 ? ' pendiente' : ' pendientes');
+  const net = document.getElementById('net');
+  net.classList.toggle('off', pendientes > 0);
+  net.querySelector('b').textContent = pendientes > 0 ? 'Sin enlace' : 'OK';
+}
+
+function abrir(m){
+  maquinaSel = m;
+  if(m.estado === 'run'){
+    document.getElementById('catTitle').textContent = m.nombre;
+    document.getElementById('catSub').textContent = m.id + ' · ¿qué la detuvo?';
+    document.getElementById('cats').innerHTML = '';
+    for(const c of CATS){
+      const el = document.createElement('button');
+      el.className = 'cat';
+      el.innerHTML = `<svg viewBox="0 0 24 24">${ICONS[c.icono]}</svg><b>${c.nombre}</b><small>${c.causas.length} causas</small>`;
+      el.onclick = () => abrirCausas(c);
+      document.getElementById('cats').appendChild(el);
+    }
+    document.getElementById('sheetCat').classList.add('open');
+  } else {
+    const falta = m.desde ? m.desde : '09:00';
+    document.getElementById('resTitle').textContent = m.nombre;
+    document.getElementById('resCause').textContent = m.causa;
+    document.getElementById('resSince').textContent = 'desde ' + falta + ' · ' + (m.estado === 'plan' ? 'parada planificada' : 'parada no planificada');
+    document.getElementById('commentBox').classList.remove('open');
+    document.getElementById('commentTxt').value = '';
+    arrancarTimer(falta);
+    document.getElementById('sheetResume').classList.add('open');
+  }
+}
+
+function abrirCausas(c){
+  catSel = c;
+  document.getElementById('causeTitle').textContent = c.nombre;
+  document.getElementById('causeSub').textContent = maquinaSel.nombre + ' · ' + c.nombre;
+  const cont = document.getElementById('causes');
+  cont.innerHTML = '';
+  c.causas.forEach(([nombre, plan], i) => {
+    const b = document.createElement('button');
+    b.className = 'cause' + (plan ? ' plan' : '');
+    b.innerHTML = `<span>${String(i + 1).padStart(2,'0')}</span>${nombre}${plan ? '<em class="tag">planificada</em>' : ''}`;
+    b.onclick = () => registrar(maquinaSel, nombre, plan);
+    cont.appendChild(b);
+  });
+  document.getElementById('sheetCat').classList.remove('open');
+  document.getElementById('sheetCause').classList.add('open');
+}
+
+function registrar(m, causa, plan){
+  m.estado = plan ? 'plan' : 'stop';
+  m.causa = causa;
+  m.desde = hora();
+  m.pendiente = true;
+  pendientes++;
+  cerrarTodo();
+  pintar();
+  mostrarToast('Parada registrada', `${m.nombre} · ${causa} · ${m.desde}`, () => {
+    m.estado = 'run'; delete m.causa; delete m.desde; delete m.pendiente;
+    pendientes = Math.max(0, pendientes - 1); pintar();
+  });
+}
+
+let timerId = null;
+function arrancarTimer(desde){
+  clearInterval(timerId);
+  const [h, mm] = desde.split(':').map(Number);
+  const t0 = new Date(); t0.setHours(h, mm, 0, 0);
+  const tick = () => {
+    const s = Math.max(0, Math.floor((Date.now() - t0.getTime()) / 1000));
+    const h = Math.floor(s / 3600), mm = Math.floor((s % 3600) / 60), ss = s % 60;
+    document.getElementById('resTimer').textContent = h > 0
+      ? `${h} h ${String(mm).padStart(2,'0')} min`
+      : `${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
+  };
+  tick(); timerId = setInterval(tick, 1000);
+}
+
+document.getElementById('btnResume').onclick = () => {
+  const m = maquinaSel;
+  const dur = document.getElementById('resTimer').textContent;
+  m.estado = 'run'; delete m.causa; delete m.desde; m.pendiente = true;
+  pendientes++;
+  clearInterval(timerId); cerrarTodo(); pintar();
+  mostrarToast('Operación reanudada', `${m.nombre} · ${dur} min de parada`, () => {
+    m.estado = 'stop'; m.causa = 'Cinta trabada'; m.desde = '09:42';
+    pendientes = Math.max(0, pendientes - 1); pintar();
+  });
+};
+
+document.querySelectorAll('[data-close]').forEach(b => b.onclick = cerrarTodo);
+document.getElementById('back').onclick = () => {
+  document.getElementById('sheetCause').classList.remove('open');
+  document.getElementById('sheetCat').classList.add('open');
+};
+document.getElementById('toggleComment').onclick = () => {
+  const box = document.getElementById('commentBox');
+  box.classList.toggle('open');
+  if(box.classList.contains('open')) document.getElementById('commentTxt').focus();
+};
+document.getElementById('saveComment').onclick = () => {
+  document.getElementById('toggleComment').textContent = '✓ Comentario guardado';
+  document.getElementById('commentBox').classList.remove('open');
+};
+
+function cerrarTodo(){
+  document.querySelectorAll('.sheet').forEach(s => s.classList.remove('open'));
+}
+
+let toastTimer = null;
+function mostrarToast(titulo, sub, onUndo){
+  const t = document.getElementById('toast');
+  document.getElementById('toastTitle').textContent = titulo;
+  document.getElementById('toastSub').textContent = sub;
+  t.classList.add('show');
+  const bar = document.getElementById('toastBar');
+  bar.style.transition = 'none'; bar.style.width = '100%';
+  requestAnimationFrame(() => { bar.style.transition = 'width 5s linear'; bar.style.width = '0%'; });
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 5000);
+  document.getElementById('toastUndo').onclick = () => {
+    clearTimeout(toastTimer); t.classList.remove('show'); undo && onUndo();
+  };
+  undo = onUndo;
+}
+
+function hora(){
+  const d = new Date();
+  return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+}
+function reloj(){
+  const d = new Date();
+  document.getElementById('clk').textContent = hora();
+  document.getElementById('dt').textContent =
+    d.toLocaleDateString('es-CL', { weekday:'short', day:'2-digit', month:'short' });
+}
+reloj(); setInterval(reloj, 10000);
+pintar();
+</script>
+</body>
+</html>

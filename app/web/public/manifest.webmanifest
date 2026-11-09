@@ -1,0 +1,12 @@
+{
+  "name": "Paradas · Tablero de planta",
+  "short_name": "Paradas",
+  "start_url": "/",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#080B0F",
+  "theme_color": "#080B0F",
+  "icons": [
+    { "src": "/icono.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
