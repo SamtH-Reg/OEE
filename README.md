@@ -91,8 +91,8 @@ Botón de engranaje en la cabecera → panel **Ajustes** con tres pestañas:
 
 | Pestaña | Qué permite |
 |---|---|
-| **Líneas** | Crear líneas, editar código/nombre/descripción, activar o desactivar, y abrir la trama para agregar, quitar y reordenar máquinas y marcar el cuello de botella. |
-| **Equipos** | Alta y edición de máquinas (área, código, nombre, nombre corto, criticidad) y activación/desactivación. Se agrupan por área. |
+| **Líneas** | Crear líneas (el código es opcional: se genera desde el nombre), editar nombre/descripción, activar o desactivar desde el formulario, y abrir la trama para agregar, quitar y reordenar máquinas y marcar el cuello de botella. |
+| **Equipos** | Alta y edición de máquinas (área, nombre, nombre corto, criticidad; el código es opcional y se genera solo). Se agrupan por área. |
 | **Recetas** | Especie, producto, línea, toneladas por turno, rendimiento, vigencia y **distribución del flujo por máquina** (porcentaje por equipo de la línea). Se pueden crear especies y productos desde el mismo formulario con «＋». |
 
 Un equipo desactivado deja de aparecer en el tablero pero conserva su historial: las paradas

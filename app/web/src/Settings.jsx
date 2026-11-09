@@ -172,10 +172,6 @@ export default function Settings({ onClose, onTrama, onSaved }) {
                     </div>
                     <button className="btn-ghost" onClick={() => onTrama(l)}>Trama</button>
                     <button className="btn-ghost" onClick={() => abrir('linea', l)}>Editar</button>
-                    <button className="btn-ghost" onClick={async () => {
-                      await api.editarLinea(l.id, { activa: !l.activa });
-                      await cargar(); onSaved && onSaved();
-                    }}>{l.activa ? 'Desactivar' : 'Activar'}</button>
                   </div>
                 );
               })}
@@ -205,10 +201,6 @@ export default function Settings({ onClose, onTrama, onSaved }) {
                           <small>{m.nombre_corto} · criticidad {m.criticidad}{m.activa ? '' : ' · inactiva'}</small>
                         </div>
                         <button className="btn-ghost" onClick={() => abrir('maquina', m)}>Editar</button>
-                        <button className="btn-ghost" onClick={async () => {
-                          await api.editarMaquina(m.id, { activa: !m.activa });
-                          await cargar(); onSaved && onSaved();
-                        }}>{m.activa ? 'Desactivar' : 'Activar'}</button>
                       </div>
                     ))}
                   </div>
