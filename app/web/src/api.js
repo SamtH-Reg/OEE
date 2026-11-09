@@ -22,5 +22,14 @@ export const api = {
   guardarTrama: (lineaId, maquinas) =>
     req(`/api/lineas/${lineaId}/trama`, { method: 'PUT', body: JSON.stringify({ maquinas }) }),
   sync: (body) => req('/api/sync', { method: 'POST', body: JSON.stringify(body) }),
+  settings: () => req('/api/settings'),
+  crearLinea: (b) => req('/api/lineas', { method: 'POST', body: JSON.stringify(b) }),
+  editarLinea: (id, b) => req(`/api/lineas/${id}`, { method: 'PUT', body: JSON.stringify(b) }),
+  crearMaquina: (b) => req('/api/maquinas', { method: 'POST', body: JSON.stringify(b) }),
+  editarMaquina: (id, b) => req(`/api/maquinas/${id}`, { method: 'PUT', body: JSON.stringify(b) }),
+  crearEspecie: (b) => req('/api/especies', { method: 'POST', body: JSON.stringify(b) }),
+  crearProducto: (b) => req('/api/productos', { method: 'POST', body: JSON.stringify(b) }),
+  crearReceta: (b) => req('/api/recetas', { method: 'POST', body: JSON.stringify(b) }),
+  editarReceta: (id, b) => req(`/api/recetas/${id}`, { method: 'PUT', body: JSON.stringify(b) }),
   historial: (q = '') => req('/api/historial' + q)
 };

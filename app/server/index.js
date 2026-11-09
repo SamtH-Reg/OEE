@@ -269,6 +269,199 @@ app.get('/api/historial', async (req) => {
   return { paradas: r.rows };
 });
 
+// ---------------- administración (ajustes) ----------------
+app.get('/api/settings', async () => {
+  const [areas, maquinas, lineas, trama, especies, productos, recetas, distribucion] = await Promise.all([
+    q('select id, codigo, nombre from areas order by orden, nombre'),
+    q(`select id, area_id, codigo, nombre, nombre_corto, criticidad, activa
+         from maquinas order by area_id, orden, codigo`),
+    q('select id, codigo, nombre, descripcion, orden, activa from lineas order by orden, codigo'),
+    q(`select linea_id, maquina_id, posicion, detiene_linea from linea_maquinas order by linea_id, posicion`),
+    q('select id, codigo, nombre, activa from especies order by nombre'),
+    q('select id, codigo, nombre, especie_id, activo from productos order by nombre'),
+    q('select * from v_recetas'),
+    q('select receta_id, maquina_id, porcentaje from receta_maquinas')
+  ]);
+  return {
+    areas: areas.rows, maquinas: maquinas.rows, lineas: lineas.rows, trama: trama.rows,
+    especies: especies.rows, productos: productos.rows,
+    recetas: recetas.rows, distribucion: distribucion.rows
+  };
+});
+
+const texto = (v, max = 120) => (v == null ? null : String(v).trim().slice(0, max));
+const codigo = (v) => texto(v, 24)?.toUpperCase();
+
+app.post('/api/lineas', async (req, reply) => {
+  const b = req.body || {};
+  if (!codigo(b.codigo) || !texto(b.nombre)) {
+    return reply.code(400).send({ error: 'código y nombre son obligatorios' });
+  }
+  try {
+    const r = await q(
+      `insert into lineas (codigo, nombre, descripcion, orden)
+       values ($1, $2, $3, coalesce($4, (select coalesce(max(orden), 0) + 1 from lineas)))
+       returning *`,
+      [codigo(b.codigo), texto(b.nombre), texto(b.descripcion, 240), b.orden ?? null]);
+    return r.rows[0];
+  } catch (e) {
+    return reply.code(400).send({ error: e.code === '23505' ? 'ya existe una línea con ese código' : e.message });
+  }
+});
+
+app.put('/api/lineas/:id', async (req, reply) => {
+  const b = req.body || {};
+  try {
+    const r = await q(
+      `update lineas set codigo = coalesce($2, codigo),
+                         nombre = coalesce($3, nombre),
+                         descripcion = $4,
+                         activa = coalesce($5, activa),
+                         orden = coalesce($6, orden)
+        where id = $1 returning *`,
+      [req.params.id, codigo(b.codigo), texto(b.nombre), texto(b.descripcion, 240),
+       b.activa ?? null, b.orden ?? null]);
+    if (!r.rowCount) return reply.code(404).send({ error: 'línea no existe' });
+    return r.rows[0];
+  } catch (e) {
+    return reply.code(400).send({ error: e.code === '23505' ? 'código de línea repetido' : e.message });
+  }
+});
+
+app.post('/api/maquinas', async (req, reply) => {
+  const b = req.body || {};
+  if (!b.area_id || !codigo(b.codigo) || !texto(b.nombre)) {
+    return reply.code(400).send({ error: 'área, código y nombre son obligatorios' });
+  }
+  try {
+    const r = await q(
+      `insert into maquinas (area_id, codigo, nombre, nombre_corto, criticidad, orden, activa)
+       values ($1, $2, $3, $4, coalesce($5, 2),
+               coalesce($6, (select coalesce(max(orden), 0) + 1 from maquinas where area_id = $1)),
+               coalesce($7, true))
+       returning *`,
+      [b.area_id, codigo(b.codigo), texto(b.nombre), texto(b.nombre_corto, 40) || texto(b.nombre, 20),
+       b.criticidad ?? 2, b.orden ?? 0, b.activa ?? true]);
+    return r.rows[0];
+  } catch (e) {
+    return reply.code(400).send({ error: e.code === '23505' ? 'ya existe una máquina con ese código' : e.message });
+  }
+});
+
+app.put('/api/maquinas/:id', async (req, reply) => {
+  const b = req.body || {};
+  try {
+    const r = await q(
+      `update maquinas set area_id = coalesce($2, area_id),
+                           codigo = coalesce($3, codigo),
+                           nombre = coalesce($4, nombre),
+                           nombre_corto = coalesce($5, nombre_corto),
+                           criticidad = coalesce($6, criticidad),
+                           activa = coalesce($7, activa)
+        where id = $1 returning *`,
+      [req.params.id, b.area_id ?? null, codigo(b.codigo), texto(b.nombre), texto(b.nombre_corto, 40),
+       b.criticidad ?? null, b.activa ?? null]);
+    if (!r.rowCount) return reply.code(404).send({ error: 'máquina no existe' });
+    return r.rows[0];
+  } catch (e) {
+    return reply.code(400).send({ error: e.code === '23505' ? 'código de máquina repetido' : e.message });
+  }
+});
+
+app.post('/api/especies', async (req, reply) => {
+  const b = req.body || {};
+  if (!codigo(b.codigo) || !texto(b.nombre)) {
+    return reply.code(400).send({ error: 'código y nombre son obligatorios' });
+  }
+  try {
+    const r = await q('insert into especies (codigo, nombre) values ($1, $2) returning *',
+      [codigo(b.codigo), texto(b.nombre)]);
+    return r.rows[0];
+  } catch (e) {
+    return reply.code(400).send({ error: e.code === '23505' ? 'esa especie ya existe' : e.message });
+  }
+});
+
+app.post('/api/productos', async (req, reply) => {
+  const b = req.body || {};
+  if (!codigo(b.codigo) || !texto(b.nombre)) {
+    return reply.code(400).send({ error: 'código y nombre son obligatorios' });
+  }
+  try {
+    const r = await q('insert into productos (codigo, nombre, especie_id) values ($1, $2, $3) returning *',
+      [codigo(b.codigo), texto(b.nombre), b.especie_id ?? null]);
+    return r.rows[0];
+  } catch (e) {
+    return reply.code(400).send({ error: e.code === '23505' ? 'ese producto ya existe' : e.message });
+  }
+});
+
+async function guardarReceta(id, b) {
+  const client = await pool.connect();
+  try {
+    await client.query('begin');
+    let recetaId = id;
+    if (recetaId) {
+      const r = await client.query(
+        `update recetas set codigo=$2, nombre=$3, especie_id=$4, producto_id=$5, linea_id=$6,
+                            toneladas_turno=$7, rendimiento_pct=$8, vigente_desde=$9,
+                            vigente_hasta=$10, activa=$11, notas=$12
+          where id=$1 returning id`,
+        [recetaId, codigo(b.codigo), texto(b.nombre), b.especie_id ?? null, b.producto_id ?? null,
+         b.linea_id ?? null, b.toneladas_turno ?? null, b.rendimiento_pct ?? null,
+         b.vigente_desde || null, b.vigente_hasta || null, b.activa ?? true, texto(b.notas, 400)]);
+      if (!r.rowCount) throw new Error('receta no existe');
+    } else {
+      const r = await client.query(
+        `insert into recetas (codigo, nombre, especie_id, producto_id, linea_id,
+                              toneladas_turno, rendimiento_pct, vigente_desde, vigente_hasta, activa, notas)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) returning id`,
+        [codigo(b.codigo), texto(b.nombre), b.especie_id ?? null, b.producto_id ?? null,
+         b.linea_id ?? null, b.toneladas_turno ?? null, b.rendimiento_pct ?? null,
+         b.vigente_desde || null, b.vigente_hasta || null, b.activa ?? true, texto(b.notas, 400)]);
+      recetaId = r.rows[0].id;
+    }
+
+    await client.query('delete from receta_maquinas where receta_id = $1', [recetaId]);
+    for (const d of (b.distribucion || [])) {
+      if (!d.maquina_id) continue;
+      await client.query(
+        `insert into receta_maquinas (receta_id, maquina_id, porcentaje)
+         values ($1, $2, $3) on conflict (receta_id, maquina_id) do update set porcentaje = excluded.porcentaje`,
+        [recetaId, d.maquina_id, d.porcentaje ?? 100]);
+    }
+    await client.query('commit');
+    return recetaId;
+  } catch (e) {
+    await client.query('rollback');
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+app.post('/api/recetas', async (req, reply) => {
+  const b = req.body || {};
+  if (!codigo(b.codigo) || !texto(b.nombre)) {
+    return reply.code(400).send({ error: 'código y nombre son obligatorios' });
+  }
+  try {
+    const id = await guardarReceta(null, b);
+    return { id };
+  } catch (e) {
+    return reply.code(400).send({ error: e.code === '23505' ? 'ya existe una receta con ese código' : e.message });
+  }
+});
+
+app.put('/api/recetas/:id', async (req, reply) => {
+  try {
+    await guardarReceta(Number(req.params.id), req.body || {});
+    return { ok: true };
+  } catch (e) {
+    return reply.code(400).send({ error: e.message });
+  }
+});
+
 // ---------------- PWA ----------------
 app.register(fastifyStatic, {
   root: path.join(__dirname, '..', 'web', 'dist'),

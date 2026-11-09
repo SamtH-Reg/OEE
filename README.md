@@ -20,9 +20,11 @@ para planta de procesamiento pesquero.
 | `sql/004_lineas.sql` | Líneas, tramas (secuencia de máquinas) y propagación de la parada. |
 | `sql/005_semilla_lineas.sql` | Tres líneas de demostración con su cuello de botella. |
 | `sql/006_tramas_sin_solape.sql` | Corrige tramas que compartían máquinas entre líneas. |
+| `sql/007_recetas.sql` | Especies, productos, recetas y distribución por máquina. |
+| `sql/008_semilla_recetas.sql` | Recetas de demostración (merluza, salmón, jibia). |
 | `sql/semilla_demo.sql` | Datos de demostración (171 paradas, 13 máquinas, 4 áreas, 28 turnos). |
 | `sql/reset_demo.sql` | Deja la base vacía (borra todo el esquema). |
-| `pruebas/pruebas.js` | 20 pruebas: integridad, 2 clics, offline, borrado y propagación por línea. |
+| `pruebas/pruebas.js` | 23 pruebas: integridad, 2 clics, offline, borrado, propagación y administración. |
 
 ## Estado
 
@@ -80,6 +82,29 @@ ordenada dentro de una línea). Una parada se propaga según el criterio configu
 - Una parada se registra **una sola vez**: las máquinas arrastradas se marcan como afectadas
   (`v_maquinas_afectadas`), no se duplican registros. Para minutos-máquina existe
   `v_paradas_efectivas`; el Pareto sigue contando el evento una vez.
+
+## Ajustes de planta (administración)
+
+Botón de engranaje en la cabecera → panel **Ajustes** con tres pestañas:
+
+![Ajustes](captura-ajustes.png)
+
+| Pestaña | Qué permite |
+|---|---|
+| **Líneas** | Crear líneas, editar código/nombre/descripción, activar o desactivar, y abrir la trama para agregar, quitar y reordenar máquinas y marcar el cuello de botella. |
+| **Equipos** | Alta y edición de máquinas (área, código, nombre, nombre corto, criticidad) y activación/desactivación. Se agrupan por área. |
+| **Recetas** | Especie, producto, línea, toneladas por turno, rendimiento, vigencia y **distribución del flujo por máquina** (porcentaje por equipo de la línea). Se pueden crear especies y productos desde el mismo formulario con «＋». |
+
+Un equipo desactivado deja de aparecer en el tablero pero conserva su historial: las paradas
+antiguas siguen apuntando a esa máquina. Igual criterio para líneas y recetas.
+
+### Modelo de recetas
+
+- `especies` y `productos` (con su especie) son catálogos simples.
+- `recetas` une especie + producto + línea y guarda toneladas por turno, rendimiento y vigencia.
+- `receta_maquinas` guarda la **distribución**: qué porcentaje del flujo pasa por cada máquina
+  de esa línea (ej. fileteadora 65%, túnel 35%).
+- `v_recetas` entrega la receta ya resuelta para el panel.
 
 ## App funcional
 

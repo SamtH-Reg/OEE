@@ -5,6 +5,7 @@ import {
 } from './db';
 import { api } from './api';
 import { arrancarSync } from './sync';
+import Settings from './Settings';
 
 const nf = new Intl.NumberFormat('es-CL');
 
@@ -33,6 +34,7 @@ export default function App() {
   const [locales, setLocales] = useState({});   // maquina_id -> parada local
   const [cerradas, setCerradas] = useState([]); // uuids cerrados en esta sesión
 
+  const [ajustes, setAjustes] = useState(false);
   const [sheet, setSheet] = useState(null);
   const [editor, setEditor] = useState(null);
   const [toast, setToast] = useState(null);
@@ -99,6 +101,16 @@ export default function App() {
     const t = setTimeout(() => setToast(null), 5000);
     return () => clearTimeout(t);
   }, [toast]);
+
+  async function refrescar() {
+    try {
+      const [tab, lin] = await Promise.all([api.tablero(), api.lineas()]);
+      setMaqs(tab.maquinas);
+      setLineas(lin.lineas);
+      setTrama(lin.trama);
+      await guardarTablero({ maquinas: tab.maquinas, lineas: lin.lineas, trama: lin.trama });
+    } catch { /* sin red: se mantiene lo que hay */ }
+  }
 
   // ---- estado efectivo de cada máquina ----
   function estadoDe(m) {
@@ -267,16 +279,18 @@ export default function App() {
   }
 
   // ---- editor de trama ----
-  function abrirEditor() {
-    if (!lineaActual) return;
+  function abrirEditor(lineaParam) {
+    const linea = lineaParam || lineaActual;
+    if (!linea) return;
+    const lineaId = linea.linea_id ?? linea.id;
     const filas = trama
-      .filter(t => t.linea_id === lineaActual.linea_id)
+      .filter(t => t.linea_id === lineaId)
       .sort((a, b) => a.posicion - b.posicion)
       .map(t => ({
         maquina_id: t.maquina_id, nombre_corto: t.nombre_corto,
         area: t.area, detiene_linea: t.detiene_linea
       }));
-    setEditor({ linea: lineaActual, filas, nueva: '', error: null, guardando: false });
+    setEditor({ linea: { ...linea, linea_id: lineaId }, filas, nueva: '', error: null, guardando: false });
   }
 
   function editar(fn) {
@@ -369,6 +383,10 @@ export default function App() {
           <span className="dim">|</span>
           <span>{pend === 0 ? 'sin pendientes' : `${pend} ${pend === 1 ? 'pendiente' : 'pendientes'}`}</span>
         </div>
+
+        <button className="gear" onClick={() => setAjustes(true)} title="Ajustes de planta" aria-label="Ajustes">
+          <svg viewBox="0 0 24 24">{ICONOS.engranaje && <path d={ICONOS.engranaje} />}</svg>
+        </button>
 
         <div className="clock">
           <b>{new Date(ahora).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}</b>
@@ -602,6 +620,18 @@ export default function App() {
             </button>
           </div>
         </div>
+      )}
+
+      {ajustes && (
+        <Settings
+          onClose={() => { setAjustes(false); refrescar(); }}
+          onSaved={refrescar}
+          onTrama={(linea) => {
+            setSel(linea.id);
+            setAjustes(false);
+            refrescar().then(() => abrirEditor(linea));
+          }}
+        />
       )}
 
       {toast && (

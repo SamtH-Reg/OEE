@@ -54,6 +54,8 @@ async function debeFallar(c, nombre, sql, esperado) {
   console.log('== Restricciones de integridad');
   await debeFallar(c, 'no permite dos paradas abiertas en la misma máquina', `
     insert into registro_paradas (maquina_id, codigo_causa_id, turno_id, hora_inicio, estado)
+    values (5, 1, (select min(id) from turnos), now(), 'activa');
+    insert into registro_paradas (maquina_id, codigo_causa_id, turno_id, hora_inicio, estado)
     values (5, 1, (select min(id) from turnos), now(), 'activa');`, 'ux_parada_abierta|duplicate');
   await debeFallar(c, 'no permite hora_fin anterior a hora_inicio', `
     insert into registro_paradas (maquina_id, codigo_causa_id, turno_id, hora_inicio, hora_fin, estado)
@@ -173,6 +175,28 @@ async function debeFallar(c, nombre, sql, esperado) {
                               group by 1 order by 1`);
     if (r.rows.length !== 3) throw new Error('líneas=' + r.rows.length);
     return r.rows.map(x => x.codigo + ':' + x.n).join(' ');
+  });
+
+  console.log('== Administración: líneas, equipos y recetas');
+  await ok(c, 'se puede crear una línea con su trama', async () => {
+    const l = await c.query(`insert into lineas (codigo, nombre) values ('LTEST','Línea de prueba') returning id`);
+    await c.query(`insert into linea_maquinas (linea_id, maquina_id, posicion, detiene_linea)
+                   values ($1, 1, 1, true)`, [l.rows[0].id]);
+    const t = await c.query(`select count(*)::int n from linea_maquinas where linea_id = $1`, [l.rows[0].id]);
+    if (t.rows[0].n !== 1) throw new Error('trama incompleta');
+    return 'línea + 1 máquina';
+  });
+  await debeFallar(c, 'no se repite el código de línea',
+    `insert into lineas (codigo, nombre) values ('L1','duplicada')`, 'duplicate|unique');
+  await ok(c, 'una receta guarda su distribución por máquina', async () => {
+    const r = await c.query(`insert into recetas (codigo, nombre, linea_id, toneladas_turno)
+                             values ('R-TEST','Prueba', (select id from lineas where codigo='L1'), 10)
+                             returning id`);
+    await c.query(`insert into receta_maquinas (receta_id, maquina_id, porcentaje)
+                   values ($1, 1, 60), ($1, 2, 40)`, [r.rows[0].id]);
+    const v = await c.query(`select maquinas from v_recetas where id = $1`, [r.rows[0].id]);
+    if (v.rows[0].maquinas !== 2) throw new Error('distribución=' + v.rows[0].maquinas);
+    return '2 máquinas (60/40)';
   });
 
   console.log('== Auditoría y métricas');
