@@ -570,3 +570,13 @@ header{
 .form-grid .fallas label.falla.on{color:var(--accent);font-weight:600}
 
 .link{margin-left:4px}
+
+/* ---------------- gestor de areas ---------------- */
+.areas-list{display:flex;flex-direction:column;gap:9px;margin-top:6px}
+.area-row{display:flex;align-items:center;gap:10px}
+.area-row input{
+  height:52px;flex:1;border:1px solid var(--line);border-radius:11px;padding:0 14px;
+  font:15px inherit;color:var(--ink);background:#fff;
+}
+.area-row input.ord{flex:0 0 92px;text-align:center}
+.area-row .badge.sm{min-width:74px}

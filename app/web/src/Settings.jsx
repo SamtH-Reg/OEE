@@ -24,6 +24,7 @@ export default function Settings({ onClose, onTrama, onSaved }) {
   const [confirmando, setConfirmando] = useState(false);
   const [borrando, setBorrando] = useState(false);
   const [nuevaFalla, setNuevaFalla] = useState(null);
+  const [areasEdit, setAreasEdit] = useState(null);
 
   async function cargar() {
     try {
@@ -85,6 +86,31 @@ export default function Settings({ onClose, onTrama, onSaved }) {
       setForm(prev => ({ ...prev, error: e.message }));
     } finally {
       setGuardando(false);
+    }
+  }
+
+  function abrirAreas() {
+    setAreasEdit(data.areas.map(a => ({ ...a })));
+  }
+
+  function setArea(i, campo, valor) {
+    setAreasEdit(prev => prev.map((a, k) => (k === i ? { ...a, [campo]: valor } : a)));
+  }
+
+  async function guardarArea(i) {
+    const a = areasEdit[i];
+    if (!a.nombre.trim()) return;
+    try {
+      if (a.id) await api.editarArea(a.id, { nombre: a.nombre, orden: a.orden });
+      else await api.crearArea({ nombre: a.nombre, orden: a.orden });
+      const fresca = await api.settings();
+      data.areas = fresca.areas;
+      data.maquinas = fresca.maquinas;
+      setAreasEdit(fresca.areas.map(x => ({ ...x })));
+      await cargar();
+      onSaved && onSaved();
+    } catch (e) {
+      setError(e.message);
     }
   }
 
@@ -229,6 +255,7 @@ export default function Settings({ onClose, onTrama, onSaved }) {
           <>
             <div className="set-bar">
               <span className="set-count">{data.maquinas.length} equipos en {data.areas.length} áreas</span>
+              <button className="btn-ghost" onClick={abrirAreas}>Áreas</button>
               <button className="btn-add" onClick={() => abrir('maquina')}>＋ Nuevo equipo</button>
             </div>
             {data.areas.map(a => {
@@ -511,7 +538,7 @@ export default function Settings({ onClose, onTrama, onSaved }) {
             </div>
           </div>
 
-          {nuevaFalla && (
+      {nuevaFalla && (
             <div className="form-card mini-card">
               <div className="form-head">
                 <h3>Nueva falla</h3>
@@ -557,6 +584,42 @@ export default function Settings({ onClose, onTrama, onSaved }) {
           )}
         </div>
       )}
+
+          {areasEdit && (
+        <div className="form-layer">
+          <div className="form-card">
+            <div className="form-head">
+              <h3>Áreas de la planta</h3>
+              <button className="x" onClick={() => setAreasEdit(null)}>✕</button>
+            </div>
+
+            <div className="areas-list">
+              {areasEdit.map((a, i) => (
+                <div className="area-row" key={a.id || 'nueva' + i}>
+                  <span className="badge sm">{a.codigo || 'nueva'}</span>
+                  <input value={a.nombre} placeholder="Nombre del área"
+                         onChange={e => setArea(i, 'nombre', e.target.value)} />
+                  <input className="ord" type="number" min="0" value={a.orden ?? 0}
+                         onChange={e => setArea(i, 'orden', Number(e.target.value))} />
+                  <button className="btn-ghost" onClick={() => guardarArea(i)} disabled={!a.nombre.trim()}>
+                    {a.id ? 'Guardar' : 'Crear'}
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <button className="wz-add" style={{ marginTop: 12 }}
+                    onClick={() => setAreasEdit([...areasEdit, { nombre: '', orden: (areasEdit.at(-1)?.orden ?? 0) + 1 }])}>
+              ＋ Nueva área
+            </button>
+            <p className="set-hint">
+              El número es el orden en que aparecen las áreas en el tablero. Un área con equipos no se puede
+              borrar: primero mové sus equipos a otra.
+            </p>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

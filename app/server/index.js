@@ -278,7 +278,7 @@ app.get('/api/historial', async (req) => {
 app.get('/api/settings', async () => {
   const [areas, maquinas, lineas, trama, especies, productos, recetas, distribucion,
          causas, categorias, maquinaCausas] = await Promise.all([
-    q('select id, codigo, nombre from areas order by orden, nombre'),
+    q('select id, codigo, nombre, orden, activa from areas order by orden, nombre'),
     q(`select id, area_id, codigo, nombre, nombre_corto, criticidad, activa
          from maquinas order by area_id, orden, codigo`),
     q('select id, codigo, nombre, descripcion, orden, activa from lineas order by orden, codigo'),
@@ -365,6 +365,38 @@ async function guardarCausasMaquina(client, maquinaId, causas) {
        on conflict do nothing`, [maquinaId, id]);
   }
 }
+
+app.post('/api/areas', async (req, reply) => {
+  const b = req.body || {};
+  if (!texto(b.nombre)) return reply.code(400).send({ error: 'el nombre es obligatorio' });
+  try {
+    const code = codigo(b.codigo) || await codigoUnico('areas', slug(b.nombre));
+    const r = await q(
+      `insert into areas (codigo, nombre, orden)
+       values ($1, $2, coalesce($3, (select coalesce(max(orden), 0) + 1 from areas)))
+       returning *`,
+      [code, texto(b.nombre, 80), b.orden ?? null]);
+    return r.rows[0];
+  } catch (e) {
+    return reply.code(400).send({ error: e.code === '23505' ? 'ya existe un área con ese nombre' : e.message });
+  }
+});
+
+app.put('/api/areas/:id', async (req, reply) => {
+  const b = req.body || {};
+  try {
+    const r = await q(
+      `update areas set nombre = coalesce($2, nombre),
+                        orden = coalesce($3, orden),
+                        activa = coalesce($4, activa)
+        where id = $1 returning *`,
+      [req.params.id, texto(b.nombre, 80), b.orden ?? null, b.activa ?? null]);
+    if (!r.rowCount) return reply.code(404).send({ error: 'área no existe' });
+    return r.rows[0];
+  } catch (e) {
+    return reply.code(400).send({ error: e.code === '23505' ? 'nombre de área repetido' : e.message });
+  }
+});
 
 app.post('/api/maquinas', async (req, reply) => {
   const b = req.body || {};
