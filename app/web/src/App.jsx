@@ -560,7 +560,11 @@ export default function App() {
             return (
               <button key={l.linea_id} className={`line-item ${sel === l.linea_id ? 'on' : ''}`}
                       onClick={() => setSel(l.linea_id)}>
-                <span className="line-badge">{l.codigo}</span>
+                <span className="line-badge">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M4 7h16M4 12h16M4 17h10" />
+                  </svg>
+                </span>
                 <span className="lname">
                   <b>{l.nombre}</b>
                   <small>
@@ -671,7 +675,9 @@ export default function App() {
                 {columnasLinea.map((col, ci) => (
                   <div className={`flow-col ${col.filas.length > 1 ? 'multi' : ''}`} key={col.pos}>
                     <span className="flow-etapa">Etapa {col.pos}</span>
-                    {col.filas.map(m => <Tile key={m.id} m={m} />)}
+                    <div className="flow-stack">
+                      {col.filas.map(m => <Tile key={m.id} m={m} />)}
+                    </div>
                     {ci < columnasLinea.length - 1 && <span className="arrow">→</span>}
                   </div>
                 ))}

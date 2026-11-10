@@ -667,7 +667,7 @@ header{
 .tf-body{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;gap:14px}
 
 /* ---------------- trama con ramas (editor y tablero) ---------------- */
-.trama-flow{align-items:flex-start;padding-top:26px}
+.trama-flow{align-items:stretch;padding-top:26px}
 .tf-col{position:relative;display:flex;flex-direction:column;gap:8px;flex:0 0 auto;width:192px;margin-right:28px}
 .tf-col:last-of-type{margin-right:0}
 .tf-col::before{
@@ -678,15 +678,16 @@ header{
   content:"";position:absolute;left:-17px;top:28px;height:2px;width:17px;background:#C5D4E2;
 }
 .tf-etapa-h{font:700 10.5px ui-monospace,monospace;letter-spacing:1.4px;text-transform:uppercase;color:var(--accent)}
-.tf-stack{display:flex;flex-direction:column;gap:10px}
+.tf-stack{flex:1;display:flex;flex-direction:column;justify-content:center;gap:10px}
 .tf-stack .tf-card{width:100%;min-height:0}
 .tf-card.flash{box-shadow:0 0 0 3px rgba(31,111,178,.4)}
 .tf-actions button{font-size:13px}
 .tf-arrow{left:auto;right:-24px}
 
 /* tablero */
-.flow.split{align-items:flex-start;gap:0}
+.flow.split{align-items:stretch;gap:0}
 .flow-col{position:relative;display:flex;flex-direction:column;gap:10px;flex:0 0 auto;width:238px;margin-right:32px}
+.flow-stack{flex:1;display:flex;flex-direction:column;justify-content:center;gap:10px}
 .flow-col:last-of-type{margin-right:0}
 .flow-etapa{font:700 10.5px ui-monospace,monospace;letter-spacing:1.4px;text-transform:uppercase;color:var(--dim)}
 .flow-col .tile{height:auto;min-height:104px}
