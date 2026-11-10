@@ -309,6 +309,25 @@ const slug = (t) => String(t || '')
   .toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '')
   .slice(0, 18) || 'EQ';
 
+async function nombreMaquinaUnico(client, areaId, base) {
+  let nombre = base, n = 1;
+  while (n < 90) {
+    const r = await client.query(
+      'select 1 from maquinas where area_id = $1 and nombre = $2', [areaId, nombre]);
+    if (!r.rowCount) return nombre;
+    n += 1;
+    nombre = `${base} ${n}`;
+  }
+  return `${base} ${Date.now().toString().slice(-4)}`;
+}
+
+// 23505 puede ser el código o el nombre dentro del área: hay que distinguirlos.
+function mensajeMaquina(e) {
+  if (e.code !== '23505') return e.message;
+  if ((e.constraint || '').includes('codigo')) return 'Ya existe un equipo con ese código.';
+  return 'Ya existe un equipo con ese nombre en el área. Cambiá el nombre.';
+}
+
 async function codigoUnico(tabla, base) {
   let code = base, n = 1;
   while (n < 100) {
@@ -509,7 +528,7 @@ app.post('/api/maquinas', async (req, reply) => {
     return { ...r.rows[0], causas: b.causas || [] };
   } catch (e) {
     await client.query('rollback');
-    return reply.code(400).send({ error: e.code === '23505' ? 'ya existe una máquina con ese código' : e.message });
+    return reply.code(400).send({ error: mensajeMaquina(e) });
   } finally {
     client.release();
   }
@@ -539,7 +558,7 @@ app.put('/api/maquinas/:id', async (req, reply) => {
     return r.rows[0];
   } catch (e) {
     await client.query('rollback');
-    return reply.code(400).send({ error: e.code === '23505' ? 'código de máquina repetido' : e.message });
+    return reply.code(400).send({ error: mensajeMaquina(e) });
   } finally {
     client.release();
   }
@@ -558,14 +577,17 @@ app.post('/api/maquinas/:id/copiar', async (req, reply) => {
       return reply.code(404).send({ error: 'máquina no existe' });
     }
     const M = o.rows[0];
-    const nombre = texto(b.nombre, 80) || `${M.nombre} (copia)`;
+    const areaDestino = b.area_id ?? M.area_id;
+    const base = texto(b.nombre, 80) || `${M.nombre} (copia)`;
+    // dentro de un área el nombre es único: si ya existe, se numera solo
+    const nombre = await nombreMaquinaUnico(client, areaDestino, base);
     const code = codigo(b.codigo) || await codigoUnico('maquinas', slug(nombre));
     const r = await client.query(
       `insert into maquinas (area_id, codigo, nombre, nombre_corto, criticidad, orden, activa)
        values ($1, $2, $3, $4, $5,
                (select coalesce(max(orden), 0) + 1 from maquinas where area_id = $1), $6)
        returning *`,
-      [b.area_id ?? M.area_id, code, nombre,
+      [areaDestino, code, nombre,
        texto(b.nombre_corto, 40) || `${M.nombre_corto} (copia)`, M.criticidad, M.activa]);
 
     if (b.copiar_fallas !== false) {
