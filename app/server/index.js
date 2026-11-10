@@ -646,6 +646,14 @@ app.post('/api/causas', async (req, reply) => {
       `insert into codigos_causa (codigo, categoria_id, descripcion, es_planificada)
        values ($1, $2, $3, $4) returning *`,
       [code, b.categoria_id, texto(b.descripcion, 120), !!b.es_planificada]);
+
+    // opcional: asignarla de una vez a varios equipos (familia)
+    if (Array.isArray(b.aplicar_a) && b.aplicar_a.length) {
+      for (const mid of b.aplicar_a) {
+        await q(`insert into maquina_causas (maquina_id, codigo_causa_id) values ($1, $2)
+                 on conflict do nothing`, [mid, r.rows[0].id]);
+      }
+    }
     return r.rows[0];
   } catch (e) {
     return reply.code(400).send({ error: e.code === '23505' ? 'esa falla ya existe' : e.message });

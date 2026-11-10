@@ -207,7 +207,13 @@ export default function Settings({ onClose, onTrama, onSaved }) {
   async function crearFalla() {
     if (!nuevaFalla || !nuevaFalla.descripcion.trim()) return;
     try {
-      const c = await api.crearCausa(nuevaFalla);
+      const c = await api.crearCausa({
+        categoria_id: nuevaFalla.categoria_id,
+        descripcion: nuevaFalla.descripcion,
+        aplicar_a: nuevaFalla.todas && familia.equipos.length
+          ? familia.equipos.map(m => m.id)
+          : undefined
+      });
       await cargar();
       set('causas', [...(form.valores.causas || []), c.id]);
       setNuevaFalla(null);
@@ -245,6 +251,16 @@ export default function Settings({ onClose, onTrama, onSaved }) {
       setForm(prev => (prev ? { ...prev, error: e.message } : prev));
     }
   }
+
+  // Familia: equipos con el mismo nombre base (TRIO FDS 1..4 -> "TRIO FDS")
+  const familia = useMemo(() => {
+    if (!data || !form || form.tipo !== 'maquina' || !form.item) return { base: '', equipos: [] };
+    const base = form.item.nombre.replace(/\s+\d+$/, '').trim();
+    if (!base || base === form.item.nombre) return { base, equipos: [] };
+    const equipos = data.maquinas.filter(
+      m => m.nombre.replace(/\s+\d+$/, '').trim().toLowerCase() === base.toLowerCase());
+    return { base, equipos: equipos.length > 1 ? equipos : [] };
+  }, [form, data]);
 
   const maquinasDeLinea = useMemo(() => {
     if (!data || !form || form.tipo !== 'receta' || !form.valores.linea_id) return [];
@@ -531,7 +547,10 @@ export default function Settings({ onClose, onTrama, onSaved }) {
                               );
                             })}
                             <button type="button" className="falla-add"
-                                    onClick={() => setNuevaFalla({ categoria_id: cat.id, descripcion: '' })}>
+                                    onClick={() => setNuevaFalla({
+                                      categoria_id: cat.id, descripcion: '',
+                                      todas: familia.equipos.length > 0
+                                    })}>
                               ＋ Nueva
                             </button>
                           </div>
@@ -647,6 +666,17 @@ export default function Settings({ onClose, onTrama, onSaved }) {
                          placeholder="Cinta trabada" />
                 </label>
               </div>
+
+              {familia.equipos.length > 0 && (
+                <label className="wz-check" style={{ marginTop: 12 }}>
+                  <input type="checkbox" checked={!!nuevaFalla.todas}
+                         onChange={e => setNuevaFalla({ ...nuevaFalla, todas: e.target.checked })} />
+                  Aplicar también a los {familia.equipos.length} equipos «{familia.base}»
+                  <span style={{ color: 'var(--dim)', fontWeight: 400, fontSize: 12.5 }}>
+                    ({familia.equipos.map(m => m.nombre_corto).join(', ')})
+                  </span>
+                </label>
+              )}
               <div className="form-foot">
                 <button className="ghost" onClick={() => setNuevaFalla(null)}>Cancelar</button>
                 <button className="btn-go small" onClick={crearFalla}>Crear y asignar</button>
