@@ -96,13 +96,15 @@ El botón **«＋ Armar línea»** abre un asistente que crea todo de una vez, s
 1. **La línea** — nombre y descripción (el código se genera solo).
 2. **Sus equipos** — se agregan en orden; cada fila puede ser un equipo existente o uno nuevo
    (se escribe el nombre y se elige el área). Se marca cuál es el **cuello de línea**.
-3. **La receta** — especie, producto, toneladas por turno, rendimiento y distribución % por equipo.
+3. **Especie y producto** — qué elabora la línea. Se pueden crear ahí mismo con «＋» y quedan
+   seleccionados al instante.
 
-Al terminar quedan creados la línea, sus equipos, la trama y la receta.
+Al terminar quedan creados la línea, sus equipos y la trama; la especie y el producto quedan
+guardados en la línea (columna `lineas.especie_id` / `producto_id`).
 
 | Pestaña | Qué permite |
 |---|---|
-| **Líneas** | Crear líneas (el código es opcional: se genera desde el nombre), editar nombre/descripción, activar o desactivar desde el formulario, y abrir la trama para agregar, quitar y reordenar máquinas y marcar el cuello de botella. |
+| **Líneas** | Crear líneas con el asistente (nombre, equipos y especie/producto), editar nombre/descripción, activar o desactivar desde el formulario, y abrir la trama para agregar, quitar y reordenar máquinas y marcar el cuello de botella. |
 | **Equipos** | Botón **Áreas** para crear y editar las áreas (nombre y orden en que aparecen en el tablero). Alta y edición de máquinas (área, nombre, nombre corto, criticidad; el código es opcional y se genera solo). Incluye **fallas posibles del equipo**: se marcan las que le aplican y se pueden crear nuevas ahí mismo. Se agrupan por área. Cada equipo tiene **Eliminar**; si ya tiene paradas registradas no se elimina (se ofrece desactivarlo) para no romper el historial. |
 | **Recetas** | Especie, producto, línea, toneladas por turno, rendimiento, vigencia y **distribución del flujo por máquina** (porcentaje por equipo de la línea). Se pueden crear especies y productos desde el mismo formulario con «＋». |
 | **Datos** | Resumen de los datos de demostración y botón **«Eliminar datos de demostración»** con confirmación. Borra equipos, líneas, recetas y paradas de ejemplo; conserva áreas, especies, productos y todo lo que hayas cargado vos. |

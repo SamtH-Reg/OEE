@@ -368,7 +368,10 @@ export default function Settings({ onClose, onTrama, onSaved }) {
                   <div className={`set-row ${l.activa ? '' : 'off'}`} key={l.id}>
                     <div className="grow">
                       <b>{l.nombre}</b>
-                      <small>{n} máquinas{l.descripcion ? ' · ' + l.descripcion : ''}{l.activa ? '' : ' · inactiva'}</small>
+                      <small>
+                        {[l.especie, l.producto].filter(Boolean).join(' · ') || 'sin especie/producto'}
+                        {' · '}{n} equipos{l.activa ? '' : ' · inactiva'}
+                      </small>
                     </div>
                     <button className="btn-ghost" onClick={() => onTrama(l)}>Trama</button>
                     <button className="btn-ghost" onClick={() => abrir('linea', l)}>Editar</button>

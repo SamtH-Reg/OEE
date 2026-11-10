@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
 import { api } from './api';
 
-// Asistente: línea -> equipos -> receta, en un solo recorrido.
-// Crea lo que falte (línea, máquinas, especies, productos) sin salir del flujo.
+// Asistente: línea -> equipos -> especie/producto, en un solo recorrido.
+// Crea lo que falte sin salir del flujo.
 
 let seq = 2;
 const nuevaFila = () => ({ key: seq++, maquina_id: null, nombre: '', area_id: '', detiene_linea: false });
@@ -11,12 +11,8 @@ export default function WizardLinea({ data, onClose, onSaved }) {
   const [paso, setPaso] = useState(1);
   const [linea, setLinea] = useState({ nombre: '', descripcion: '' });
   const [filas, setFilas] = useState([{ ...nuevaFila(), detiene_linea: true }]);
-  const [conReceta, setConReceta] = useState(true);
-  const [receta, setReceta] = useState({
-    nombre: '', especie_id: '', producto_id: '', toneladas_turno: '', rendimiento_pct: ''
-  });
-  const [pct, setPct] = useState({});       // key de fila -> porcentaje
-  const [nuevo, setNuevo] = useState(null); // {tipo, codigo, nombre}
+  const [prod, setProd] = useState({ especie_id: '', producto_id: '' });
+  const [nuevo, setNuevo] = useState(null); // {tipo, nombre}
   const [error, setError] = useState(null);
   const [guardando, setGuardando] = useState(false);
 
@@ -31,12 +27,8 @@ export default function WizardLinea({ data, onClose, onSaved }) {
   function setFila(key, campo, valor) {
     setFilas(prev => prev.map(f => (f.key === key ? { ...f, [campo]: valor } : f)));
   }
-  function agregarFila() {
-    setFilas(prev => [...prev, nuevaFila()]);
-  }
-  function quitarFila(key) {
-    setFilas(prev => (prev.length === 1 ? prev : prev.filter(f => f.key !== key)));
-  }
+  function agregarFila() { setFilas(prev => [...prev, nuevaFila()]); }
+  function quitarFila(key) { setFilas(prev => (prev.length === 1 ? prev : prev.filter(f => f.key !== key))); }
   function mover(key, dir) {
     setFilas(prev => {
       const i = prev.findIndex(f => f.key === key);
@@ -52,7 +44,7 @@ export default function WizardLinea({ data, onClose, onSaved }) {
   }
 
   async function crearCatalogo() {
-    if (!nuevo || !nuevo.codigo.trim() || !nuevo.nombre.trim()) return;
+    if (!nuevo || !nuevo.nombre.trim()) return;
     try {
       const creado = nuevo.tipo === 'especie'
         ? await api.crearEspecie({ nombre: nuevo.nombre })
@@ -60,7 +52,7 @@ export default function WizardLinea({ data, onClose, onSaved }) {
       const fresca = await api.settings();
       data.especies = fresca.especies;
       data.productos = fresca.productos;
-      setReceta(r => ({ ...r, [nuevo.tipo === 'especie' ? 'especie_id' : 'producto_id']: creado.id }));
+      setProd(p => ({ ...p, [nuevo.tipo === 'especie' ? 'especie_id' : 'producto_id']: creado.id }));
       setNuevo(null);
     } catch (e) {
       setError(e.message);
@@ -84,10 +76,13 @@ export default function WizardLinea({ data, onClose, onSaved }) {
     setError(null);
     setGuardando(true);
     try {
-      // 1. línea
-      const l = await api.crearLinea({ nombre: linea.nombre, descripcion: linea.descripcion });
+      const l = await api.crearLinea({
+        nombre: linea.nombre,
+        descripcion: linea.descripcion,
+        especie_id: prod.especie_id || null,
+        producto_id: prod.producto_id || null
+      });
 
-      // 2. equipos: los nuevos se crean primero
       const resueltas = [];
       for (const f of filas) {
         if (!f.maquina_id && !f.nombre.trim()) continue;
@@ -96,36 +91,12 @@ export default function WizardLinea({ data, onClose, onSaved }) {
           const m = await api.crearMaquina({ area_id: Number(f.area_id), nombre: f.nombre, nombre_corto: f.nombre });
           maquinaId = m.id;
         }
-        resueltas.push({ key: f.key, maquina_id: maquinaId, detiene_linea: !!f.detiene_linea });
+        resueltas.push({ maquina_id: maquinaId, detiene_linea: !!f.detiene_linea });
       }
-      await api.guardarTrama(l.id, resueltas.map(r => ({ maquina_id: r.maquina_id, detiene_linea: r.detiene_linea })));
-
-      // 3. receta (opcional)
-      let recetaId = null;
-      if (conReceta && receta.especie_id && receta.producto_id) {
-        const esp = data.especies.find(e => e.id === Number(receta.especie_id));
-        const prod = data.productos.find(x => x.id === Number(receta.producto_id));
-        const nombreReceta = receta.nombre.trim() || `${prod?.nombre || 'Receta'} · ${l.codigo}`;
-        const r = await api.crearReceta({
-          codigo: `R-${esp?.codigo || 'GEN'}-${prod?.codigo || 'GEN'}`,
-          nombre: nombreReceta,
-          especie_id: Number(receta.especie_id),
-          producto_id: Number(receta.producto_id),
-          linea_id: l.id,
-          toneladas_turno: receta.toneladas_turno || null,
-          rendimiento_pct: receta.rendimiento_pct || null,
-          // si no se indicó porcentaje, se asume 100% en cada equipo
-          distribucion: resueltas.map(x => ({
-            maquina_id: x.maquina_id,
-            porcentaje: Number(pct[x.key] ?? 100)
-          }))
-        });
-        recetaId = r.id;
-      }
+      await api.guardarTrama(l.id, resueltas);
 
       onSaved && await onSaved();
       onClose();
-      return { linea: l, recetaId };
     } catch (e) {
       setError(e.message);
     } finally {
@@ -133,7 +104,7 @@ export default function WizardLinea({ data, onClose, onSaved }) {
     }
   }
 
-  const pasos = ['La línea', 'Sus equipos', 'La receta'];
+  const pasos = ['La línea', 'Sus equipos', 'Especie y producto'];
 
   return (
     <div className="wizard">
@@ -224,73 +195,41 @@ export default function WizardLinea({ data, onClose, onSaved }) {
 
         {paso === 3 && (
           <div className="wz-card">
-            <label className="wz-check">
-              <input type="checkbox" checked={conReceta} onChange={e => setConReceta(e.target.checked)} />
-              Cargar una receta ahora (especie, producto y distribución)
-            </label>
+            <p className="wz-help">
+              Qué produce esta línea. Se puede completar después y no es obligatorio para operar.
+            </p>
 
-            {conReceta && (
-              <>
-                <div className="wz-grid">
-                  <label className="wz-field">
-                    <span className="lbl">Especie</span>
-                    <div className="inline">
-                      <select value={receta.especie_id} onChange={e => setReceta({ ...receta, especie_id: e.target.value })}>
-                        <option value="">Elegir…</option>
-                        {data.especies.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
-                      </select>
-                      <button className="mini" title="Nueva especie"
-                              onClick={() => setNuevo({ tipo: 'especie', codigo: '', nombre: '' })}>＋</button>
-                    </div>
-                  </label>
-
-                  <label className="wz-field">
-                    <span className="lbl">Producto</span>
-                    <div className="inline">
-                      <select value={receta.producto_id} onChange={e => setReceta({ ...receta, producto_id: e.target.value })}>
-                        <option value="">Elegir…</option>
-                        {data.productos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-                      </select>
-                      <button className="mini" title="Nuevo producto"
-                              onClick={() => setNuevo({ tipo: 'producto', codigo: '', nombre: '' })}>＋</button>
-                    </div>
-                  </label>
-
-                  <label className="wz-field">
-                    <span className="lbl">Toneladas por turno</span>
-                    <input type="number" step="0.1" value={receta.toneladas_turno}
-                           onChange={e => setReceta({ ...receta, toneladas_turno: e.target.value })} placeholder="42" />
-                  </label>
-
-                  <label className="wz-field">
-                    <span className="lbl">Rendimiento % <em>opcional</em></span>
-                    <input type="number" step="0.1" value={receta.rendimiento_pct}
-                           onChange={e => setReceta({ ...receta, rendimiento_pct: e.target.value })} placeholder="45" />
-                  </label>
+            <div className="wz-grid">
+              <label className="wz-field">
+                <span className="lbl">Especie</span>
+                <div className="inline">
+                  <select value={prod.especie_id}
+                          onChange={e => setProd({ ...prod, especie_id: e.target.value ? Number(e.target.value) : '' })}>
+                    <option value="">Elegir…</option>
+                    {data.especies.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
+                  </select>
+                  <button className="mini" title="Nueva especie"
+                          onClick={() => setNuevo({ tipo: 'especie', nombre: '' })}>＋</button>
                 </div>
+              </label>
 
-                <div className="wz-dist">
-                  <div className="wz-dist-h">Distribución por equipo <span className="opt">opcional</span></div>
-                  {filasValidas.map(f => {
-                    const nombre = f.maquina_id
-                      ? (maquinas.find(m => m.id === f.maquina_id)?.nombre_corto || 'Equipo')
-                      : f.nombre;
-                    return (
-                      <div className="wz-dist-row" key={f.key}>
-                        <span>{nombre}</span>
-                        <div className="pct">
-                          <input type="number" min="1" max="100" placeholder="100"
-                                 value={pct[f.key] ?? ''}
-                                 onChange={e => setPct({ ...pct, [f.key]: e.target.value })} />
-                          <span>%</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                  <p className="wz-help">Si no pones porcentaje, se asume 100% en cada equipo.</p>
+              <label className="wz-field">
+                <span className="lbl">Producto</span>
+                <div className="inline">
+                  <select value={prod.producto_id}
+                          onChange={e => setProd({ ...prod, producto_id: e.target.value ? Number(e.target.value) : '' })}>
+                    <option value="">Elegir…</option>
+                    {data.productos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                  </select>
+                  <button className="mini" title="Nuevo producto"
+                          onClick={() => setNuevo({ tipo: 'producto', nombre: '' })}>＋</button>
                 </div>
-              </>
-            )}
+              </label>
+            </div>
+
+            <p className="wz-help">
+              Con «＋» creás una especie o un producto nuevo sin salir de acá; queda seleccionado al instante.
+            </p>
           </div>
         )}
 

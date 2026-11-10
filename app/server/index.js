@@ -283,7 +283,12 @@ app.get('/api/settings', async () => {
     q(`select m.id, m.area_id, m.codigo, m.nombre, m.nombre_corto, m.criticidad, m.activa,
               (select count(*) from registro_paradas p where p.maquina_id = m.id)::int as paradas
          from maquinas m order by m.area_id, m.orden, m.codigo`),
-    q('select id, codigo, nombre, descripcion, orden, activa from lineas order by orden, codigo'),
+    q(`select l.id, l.codigo, l.nombre, l.descripcion, l.orden, l.activa,
+              l.especie_id, l.producto_id, e.nombre as especie, p.nombre as producto
+         from lineas l
+         left join especies e on e.id = l.especie_id
+         left join productos p on p.id = l.producto_id
+        order by l.orden, l.codigo`),
     q(`select linea_id, maquina_id, posicion, detiene_linea from linea_maquinas order by linea_id, posicion`),
     q('select id, codigo, nombre, activa from especies order by nombre'),
     q('select id, codigo, nombre, especie_id, activo from productos order by nombre'),
@@ -363,10 +368,10 @@ app.post('/api/lineas/:id/copiar', async (req, reply) => {
     const nuevoCodigo = codigo(b.codigo) || await codigoUnico('lineas', slug(nombre));
 
     const nueva = await client.query(
-      `insert into lineas (codigo, nombre, descripcion, orden)
-       values ($1, $2, $3, (select coalesce(max(orden), 0) + 1 from lineas))
+      `insert into lineas (codigo, nombre, descripcion, orden, especie_id, producto_id)
+       values ($1, $2, $3, (select coalesce(max(orden), 0) + 1 from lineas), $4, $5)
        returning *`,
-      [nuevoCodigo, nombre, L.descripcion]);
+      [nuevoCodigo, nombre, L.descripcion, L.especie_id, L.producto_id]);
     const lineaId = nueva.rows[0].id;
 
     const trama = await client.query(
@@ -438,10 +443,11 @@ app.post('/api/lineas', async (req, reply) => {
   try {
     const code = codigo(b.codigo) || await codigoUnico('lineas', slug(b.nombre));
     const r = await q(
-      `insert into lineas (codigo, nombre, descripcion, orden)
-       values ($1, $2, $3, coalesce($4, (select coalesce(max(orden), 0) + 1 from lineas)))
+      `insert into lineas (codigo, nombre, descripcion, orden, especie_id, producto_id)
+       values ($1, $2, $3, coalesce($4, (select coalesce(max(orden), 0) + 1 from lineas)), $5, $6)
        returning *`,
-      [code, texto(b.nombre), texto(b.descripcion, 240), b.orden ?? null]);
+      [code, texto(b.nombre), texto(b.descripcion, 240), b.orden ?? null,
+       b.especie_id ?? null, b.producto_id ?? null]);
     return r.rows[0];
   } catch (e) {
     return reply.code(400).send({ error: e.code === '23505' ? 'ya existe una línea con ese código' : e.message });
@@ -454,12 +460,14 @@ app.put('/api/lineas/:id', async (req, reply) => {
     const r = await q(
       `update lineas set codigo = coalesce($2, codigo),
                          nombre = coalesce($3, nombre),
-                         descripcion = $4,
+                         descripcion = coalesce($4, descripcion),
                          activa = coalesce($5, activa),
-                         orden = coalesce($6, orden)
+                         orden = coalesce($6, orden),
+                         especie_id = coalesce($7, especie_id),
+                         producto_id = coalesce($8, producto_id)
         where id = $1 returning *`,
       [req.params.id, codigo(b.codigo) || null, texto(b.nombre), texto(b.descripcion, 240),
-       b.activa ?? null, b.orden ?? null]);
+       b.activa ?? null, b.orden ?? null, b.especie_id ?? null, b.producto_id ?? null]);
     if (!r.rowCount) return reply.code(404).send({ error: 'línea no existe' });
     return r.rows[0];
   } catch (e) {
