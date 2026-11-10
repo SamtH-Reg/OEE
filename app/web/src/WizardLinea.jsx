@@ -38,6 +38,9 @@ export default function WizardLinea({ data, onClose, onSaved }) {
       [copia[i], copia[j]] = [copia[j], copia[i]];
       return copia;
     });
+    requestAnimationFrame(() => {
+      document.getElementById('wz-' + key)?.scrollIntoView({ block: 'nearest' });
+    });
   }
   function marcarCuello(key) {
     setFilas(prev => prev.map(f => ({ ...f, detiene_linea: f.key === key })));
@@ -152,7 +155,7 @@ export default function WizardLinea({ data, onClose, onSaved }) {
 
             <div className="wz-rows">
               {filas.map((f, i) => (
-                <div className="wz-row" key={f.key}>
+                <div className="wz-row" key={f.key} id={'wz-' + f.key}>
                   <span className="wz-pos">{i + 1}</span>
 
                   <select className="wz-sel" value={f.maquina_id || ''}
