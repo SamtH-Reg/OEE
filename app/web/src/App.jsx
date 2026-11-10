@@ -193,10 +193,11 @@ export default function App() {
 
   const areas = useMemo(() => {
     if (!cat) return [];
-    return cat.areas.map(a => ({
-      ...a,
-      maquinas: maqs.filter(m => m.area_id === a.id)
-    }));
+    // solo las áreas con equipos: una planta con 6 áreas y 2 máquinas no debe
+    // mostrar cuatro columnas vacías
+    return cat.areas
+      .map(a => ({ ...a, maquinas: maqs.filter(m => m.area_id === a.id) }))
+      .filter(a => a.maquinas.length > 0);
   }, [cat, maqs]);
 
   const lineaActual = sel === 'todas' ? null : lineas.find(l => l.linea_id === sel);

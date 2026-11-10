@@ -140,7 +140,7 @@ header{
 
 /* ---------------- escenario ---------------- */
 .stage{flex:1;min-width:0;min-height:0;overflow:auto;padding:18px 22px}
-.board{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;align-content:start}
+.board{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,300px));gap:16px;align-content:start;justify-content:start}
 .area{display:flex;flex-direction:column;gap:12px;min-width:0}
 .area h2{
   margin:0;font-size:12px;letter-spacing:2.2px;color:var(--dim);text-transform:uppercase;
