@@ -104,7 +104,10 @@ export default function App() {
 
   async function refrescar() {
     try {
-      const [tab, lin] = await Promise.all([api.tablero(), api.lineas()]);
+      // también el catálogo: las fallas por equipo se editan en Ajustes
+      const [catFresca, tab, lin] = await Promise.all([api.catalogo(), api.tablero(), api.lineas()]);
+      setCat(catFresca);
+      await guardarCatalogo(catFresca);
       setMaqs(tab.maquinas);
       setLineas(lin.lineas);
       setTrama(lin.trama);
@@ -146,6 +149,23 @@ export default function App() {
   }
 
   const totalDetenidas = maqs.filter(m => estadoDe(m).tipo !== 'run').length;
+
+  // Fallas asignadas a cada equipo (si tiene, el operador ve solo esas)
+  const causasPorMaquina = useMemo(() => {
+    const mapa = new Map();
+    for (const r of (cat?.maquina_causas || [])) {
+      if (!mapa.has(r.maquina_id)) mapa.set(r.maquina_id, new Set());
+      mapa.get(r.maquina_id).add(r.codigo_causa_id);
+    }
+    return mapa;
+  }, [cat]);
+
+  function causasVisibles(maquinaId, categoriaId, todas) {
+    const asignadas = causasPorMaquina.get(maquinaId);
+    const filtrado = asignadas && asignadas.size > 0 && !todas;
+    return (cat.causas || []).filter(c =>
+      c.categoria_id === categoriaId && (!filtrado || asignadas.has(c.id)));
+  }
 
   // Estado de una línea según lo que ve el operador (incluye paradas locales
   // todavía sin sincronizar).
@@ -511,13 +531,16 @@ export default function App() {
               <div className="sub">
                 {sheet.maquina.codigo} · ¿qué la detuvo?
                 {sheet.maquina.detiene_linea ? ' · esta máquina detiene la línea' : ''}
+                {(causasPorMaquina.get(sheet.maquina.id)?.size || 0) > 0
+                  ? ' · fallas de este equipo' : ''}
               </div>
             </div>
             <button className="x" onClick={() => setSheet(null)}>✕</button>
           </div>
           <div className="cats">
             {cat.categorias.map(c => {
-              const n = cat.causas.filter(x => x.categoria_id === c.id).length;
+              const n = causasVisibles(sheet.maquina.id, c.id, false).length;
+              if (!n) return null;
               return (
                 <button key={c.id} className="cat" onClick={() => setSheet({ ...sheet, tipo: 'causas', categoria: c })}>
                   <svg viewBox="0 0 24 24">{ICONOS[c.icono] && <path d={ICONOS[c.icono]} />}</svg>
@@ -536,12 +559,19 @@ export default function App() {
             <button className="x back" onClick={() => setSheet({ tipo: 'categorias', maquina: sheet.maquina })}>←</button>
             <div>
               <h3>{sheet.categoria.nombre}</h3>
-              <div className="sub">{sheet.maquina.nombre} · elige la causa</div>
+              <div className="sub">
+                {sheet.maquina.nombre} · elige la causa
+                {(causasPorMaquina.get(sheet.maquina.id)?.size || 0) > 0 && (
+                  <button className="link" onClick={() => setSheet({ ...sheet, todas: !sheet.todas })}>
+                    {sheet.todas ? ' · ver solo las de este equipo' : ' · ver todas las fallas'}
+                  </button>
+                )}
+              </div>
             </div>
             <button className="x" onClick={() => setSheet(null)}>✕</button>
           </div>
           <div className="causes">
-            {cat.causas.filter(c => c.categoria_id === sheet.categoria.id).map((c, i) => (
+            {causasVisibles(sheet.maquina.id, sheet.categoria.id, sheet.todas).map((c, i) => (
               <button key={c.id} className={`cause ${c.es_planificada ? 'plan' : ''}`}
                       onClick={() => registrar(sheet.maquina, c, sheet.categoria)}>
                 <span className="idx">{String(i + 1).padStart(2, '0')}</span>

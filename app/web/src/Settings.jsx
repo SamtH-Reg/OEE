@@ -4,7 +4,7 @@ import WizardLinea from './WizardLinea';
 
 const vacio = {
   linea: { codigo: '', nombre: '', descripcion: '', activa: true },
-  maquina: { area_id: '', codigo: '', nombre: '', nombre_corto: '', criticidad: 2, activa: true },
+  maquina: { area_id: '', codigo: '', nombre: '', nombre_corto: '', criticidad: 2, activa: true, causas: [] },
   receta: {
     codigo: '', nombre: '', especie_id: '', producto_id: '', linea_id: '',
     toneladas_turno: '', rendimiento_pct: '', vigente_desde: '', vigente_hasta: '',
@@ -23,6 +23,7 @@ export default function Settings({ onClose, onTrama, onSaved }) {
   const [demo, setDemo] = useState(null);
   const [confirmando, setConfirmando] = useState(false);
   const [borrando, setBorrando] = useState(false);
+  const [nuevaFalla, setNuevaFalla] = useState(null);
 
   async function cargar() {
     try {
@@ -48,6 +49,9 @@ export default function Settings({ onClose, onTrama, onSaved }) {
     const base = item
       ? {
           ...item,
+          causas: tipo === 'maquina'
+            ? (data.maquina_causas || []).filter(x => x.maquina_id === item.id).map(x => x.codigo_causa_id)
+            : [],
           vigente_desde: item.vigente_desde ? String(item.vigente_desde).slice(0, 10) : '',
           vigente_hasta: item.vigente_hasta ? String(item.vigente_hasta).slice(0, 10) : '',
           distribucion: (data.distribucion || [])
@@ -81,6 +85,23 @@ export default function Settings({ onClose, onTrama, onSaved }) {
       setForm(prev => ({ ...prev, error: e.message }));
     } finally {
       setGuardando(false);
+    }
+  }
+
+  function toggleCausa(id) {
+    const actuales = form.valores.causas || [];
+    set('causas', actuales.includes(id) ? actuales.filter(x => x !== id) : [...actuales, id]);
+  }
+
+  async function crearFalla() {
+    if (!nuevaFalla || !nuevaFalla.descripcion.trim()) return;
+    try {
+      const c = await api.crearCausa(nuevaFalla);
+      await cargar();
+      set('causas', [...(form.valores.causas || []), c.id]);
+      setNuevaFalla(null);
+    } catch (e) {
+      setForm(prev => ({ ...prev, error: e.message }));
     }
   }
 
@@ -369,6 +390,38 @@ export default function Settings({ onClose, onTrama, onSaved }) {
                       onChange={e => set('codigo', e.target.value)} placeholder="automático" /></label>
                   <label className="check"><input type="checkbox" checked={!!form.valores.activa}
                     onChange={e => set('activa', e.target.checked)} /> Activa</label>
+
+                  <div className="wide fallas">
+                    <div className="fallas-h">
+                      Fallas posibles de este equipo
+                      <em>opcional · si no marcás ninguna, el operador ve todo el catálogo</em>
+                    </div>
+                    {data.categorias.map(cat => {
+                      const causas = data.causas.filter(c => c.categoria_id === cat.id && c.activo);
+                      if (!causas.length) return null;
+                      return (
+                        <div className="fallas-grupo" key={cat.id}>
+                          <div className="fallas-cat">{cat.nombre}</div>
+                          <div className="fallas-items">
+                            {causas.map(c => {
+                              const on = (form.valores.causas || []).includes(c.id);
+                              return (
+                                <label key={c.id} className={`falla ${on ? 'on' : ''}`}>
+                                  <input type="checkbox" checked={on} onChange={() => toggleCausa(c.id)} />
+                                  {c.descripcion}
+                                  {c.es_planificada && <em>plan.</em>}
+                                </label>
+                              );
+                            })}
+                            <button type="button" className="falla-add"
+                                    onClick={() => setNuevaFalla({ categoria_id: cat.id, descripcion: '' })}>
+                              ＋ Nueva
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </>
               )}
 
@@ -457,6 +510,32 @@ export default function Settings({ onClose, onTrama, onSaved }) {
               </button>
             </div>
           </div>
+
+          {nuevaFalla && (
+            <div className="form-card mini-card">
+              <div className="form-head">
+                <h3>Nueva falla</h3>
+                <button className="x" onClick={() => setNuevaFalla(null)}>✕</button>
+              </div>
+              <div className="form-grid">
+                <label>Categoría
+                  <select value={nuevaFalla.categoria_id}
+                          onChange={e => setNuevaFalla({ ...nuevaFalla, categoria_id: Number(e.target.value) })}>
+                    {data.categorias.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                  </select>
+                </label>
+                <label>Descripción
+                  <input autoFocus value={nuevaFalla.descripcion}
+                         onChange={e => setNuevaFalla({ ...nuevaFalla, descripcion: e.target.value })}
+                         placeholder="Cinta trabada" />
+                </label>
+              </div>
+              <div className="form-foot">
+                <button className="ghost" onClick={() => setNuevaFalla(null)}>Cancelar</button>
+                <button className="btn-go small" onClick={crearFalla}>Crear y asignar</button>
+              </div>
+            </div>
+          )}
 
           {nuevo && (
             <div className="form-card mini-card">

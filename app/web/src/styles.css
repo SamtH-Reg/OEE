@@ -541,3 +541,32 @@ header{
 }
 .empty h2{margin:0;font-size:26px;letter-spacing:-.3px}
 .empty p{margin:0;max-width:46ch;color:var(--muted);font-size:15.5px;line-height:1.6}
+
+/* ---------------- fallas por equipo ---------------- */
+.fallas{margin-top:6px;border-top:1px solid var(--line);padding-top:16px;display:flex;flex-direction:column;gap:13px}
+.fallas-h{display:flex;flex-direction:column;gap:3px;font-size:14.5px;font-weight:650;color:var(--ink)}
+.fallas-h em{font-style:normal;font-weight:500;font-size:12.5px;color:var(--dim)}
+.fallas-grupo{display:flex;flex-direction:column;gap:7px}
+.fallas-cat{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--dim);font-weight:700}
+.fallas-items{display:flex;flex-wrap:wrap;gap:8px}
+.falla{
+  display:flex;align-items:center;gap:9px;border:1px solid var(--line);background:var(--panel2);
+  border-radius:10px;padding:9px 13px;font-size:14px;color:var(--muted);cursor:pointer;
+}
+.falla.on{border-color:#B9D3EA;background:var(--accent-bg);color:var(--accent);font-weight:600}
+.falla input{width:18px;height:18px;accent-color:var(--accent)}
+.falla em{font-style:normal;font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--plan)}
+.falla-add{
+  border:1px dashed var(--line2);background:#fff;color:var(--accent);border-radius:10px;
+  padding:9px 13px;font:600 13.5px inherit;cursor:pointer;
+}
+.falla-add:hover{background:var(--accent-bg)}
+.link{background:none;border:0;color:var(--accent);font:inherit;font-size:inherit;cursor:pointer;padding:0;text-decoration:underline}
+
+/* el formulario fuerza columnas en los label: las fallas van en fila */
+.form-grid .fallas label.falla{
+  flex-direction:row;align-items:center;gap:9px;font-size:14px;font-weight:500;color:var(--muted);
+}
+.form-grid .fallas label.falla.on{color:var(--accent);font-weight:600}
+
+.link{margin-left:4px}

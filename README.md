@@ -103,12 +103,21 @@ Al terminar quedan creados la línea, sus equipos, la trama y la receta.
 | Pestaña | Qué permite |
 |---|---|
 | **Líneas** | Crear líneas (el código es opcional: se genera desde el nombre), editar nombre/descripción, activar o desactivar desde el formulario, y abrir la trama para agregar, quitar y reordenar máquinas y marcar el cuello de botella. |
-| **Equipos** | Alta y edición de máquinas (área, nombre, nombre corto, criticidad; el código es opcional y se genera solo). Se agrupan por área. |
+| **Equipos** | Alta y edición de máquinas (área, nombre, nombre corto, criticidad; el código es opcional y se genera solo). Incluye **fallas posibles del equipo**: se marcan las que le aplican y se pueden crear nuevas ahí mismo. Se agrupan por área. |
 | **Recetas** | Especie, producto, línea, toneladas por turno, rendimiento, vigencia y **distribución del flujo por máquina** (porcentaje por equipo de la línea). Se pueden crear especies y productos desde el mismo formulario con «＋». |
 | **Datos** | Resumen de los datos de demostración y botón **«Eliminar datos de demostración»** con confirmación. Borra equipos, líneas, recetas y paradas de ejemplo; conserva áreas, especies, productos y todo lo que hayas cargado vos. |
 
 Un equipo desactivado deja de aparecer en el tablero pero conserva su historial: las paradas
 antiguas siguen apuntando a esa máquina. Igual criterio para líneas y recetas.
+
+### Fallas por equipo
+
+En el formulario del equipo, la sección **«Fallas posibles de este equipo»** lista el catálogo por
+categoría. Lo que se marca queda asociado a esa máquina (`maquina_causas`) y el operador ve **solo
+esas fallas** al registrar una parada, con un enlace «ver todas las fallas» si necesita el catálogo
+completo. Si no se marca ninguna, se comporta como antes: muestra todo el catálogo.
+
+El botón **«＋ Nueva»** de cada categoría crea una falla nueva en el catálogo y la deja asignada.
 
 ### Modelo de recetas
 

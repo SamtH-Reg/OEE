@@ -44,7 +44,7 @@ app.get('/api/catalogo', async () => {
   // El turno se asegura en una sentencia aparte: si se llamara dentro del SELECT,
   // la fila recién insertada no sería visible para esa misma sentencia.
   await q('select fn_asegurar_turno(now())');
-  const [areas, maquinas, categorias, causas, turno] = await Promise.all([
+  const [areas, maquinas, categorias, causas, turno, maquinaCausas] = await Promise.all([
     q('select id, codigo, nombre from areas where activa order by orden, nombre'),
     q(`select id, area_id, codigo, nombre, nombre_corto, criticidad
          from maquinas where activa order by area_id, orden, nombre`),
@@ -52,13 +52,15 @@ app.get('/api/catalogo', async () => {
     q(`select id, categoria_id, codigo, descripcion, es_planificada, requiere_comentario
          from codigos_causa where activo order by categoria_id, descripcion`),
     q(`select t.id, t.fecha, t.nombre, t.supervisor
-         from turnos t where t.id = fn_turno_para(now())`)
+         from turnos t where t.id = fn_turno_para(now())`),
+    q('select maquina_id, codigo_causa_id from maquina_causas')
   ]);
   return {
     areas: areas.rows,
     maquinas: maquinas.rows,
     categorias: categorias.rows,
     causas: causas.rows,
+    maquina_causas: maquinaCausas.rows,
     turno: turno.rows[0] || null,
     ahora: new Date().toISOString()
   };
@@ -274,7 +276,8 @@ app.get('/api/historial', async (req) => {
 
 // ---------------- administración (ajustes) ----------------
 app.get('/api/settings', async () => {
-  const [areas, maquinas, lineas, trama, especies, productos, recetas, distribucion] = await Promise.all([
+  const [areas, maquinas, lineas, trama, especies, productos, recetas, distribucion,
+         causas, categorias, maquinaCausas] = await Promise.all([
     q('select id, codigo, nombre from areas order by orden, nombre'),
     q(`select id, area_id, codigo, nombre, nombre_corto, criticidad, activa
          from maquinas order by area_id, orden, codigo`),
@@ -283,12 +286,16 @@ app.get('/api/settings', async () => {
     q('select id, codigo, nombre, activa from especies order by nombre'),
     q('select id, codigo, nombre, especie_id, activo from productos order by nombre'),
     q('select * from v_recetas'),
-    q('select receta_id, maquina_id, porcentaje from receta_maquinas')
+    q('select receta_id, maquina_id, porcentaje from receta_maquinas'),
+    q('select id, codigo, categoria_id, descripcion, es_planificada, activo from codigos_causa order by categoria_id, descripcion'),
+    q('select id, codigo, nombre, icono, orden from categorias_falla where activa order by orden'),
+    q('select maquina_id, codigo_causa_id from maquina_causas')
   ]);
   return {
     areas: areas.rows, maquinas: maquinas.rows, lineas: lineas.rows, trama: trama.rows,
     especies: especies.rows, productos: productos.rows,
-    recetas: recetas.rows, distribucion: distribucion.rows
+    recetas: recetas.rows, distribucion: distribucion.rows,
+    causas: causas.rows, categorias: categorias.rows, maquina_causas: maquinaCausas.rows
   };
 });
 
@@ -349,14 +356,26 @@ app.put('/api/lineas/:id', async (req, reply) => {
   }
 });
 
+// Las fallas típicas del equipo se guardan junto con la máquina.
+async function guardarCausasMaquina(client, maquinaId, causas) {
+  await client.query('delete from maquina_causas where maquina_id = $1', [maquinaId]);
+  for (const id of (causas || [])) {
+    await client.query(
+      `insert into maquina_causas (maquina_id, codigo_causa_id) values ($1, $2)
+       on conflict do nothing`, [maquinaId, id]);
+  }
+}
+
 app.post('/api/maquinas', async (req, reply) => {
   const b = req.body || {};
   if (!b.area_id || !texto(b.nombre)) {
     return reply.code(400).send({ error: 'área y nombre son obligatorios' });
   }
+  const client = await pool.connect();
   try {
+    await client.query('begin');
     const code = codigo(b.codigo) || await codigoUnico('maquinas', slug(b.nombre_corto || b.nombre));
-    const r = await q(
+    const r = await client.query(
       `insert into maquinas (area_id, codigo, nombre, nombre_corto, criticidad, orden, activa)
        values ($1, $2, $3, $4, coalesce($5, 2),
                coalesce($6, (select coalesce(max(orden), 0) + 1 from maquinas where area_id = $1)),
@@ -364,16 +383,23 @@ app.post('/api/maquinas', async (req, reply) => {
        returning *`,
       [b.area_id, code, texto(b.nombre), texto(b.nombre_corto, 40) || texto(b.nombre, 20),
        b.criticidad ?? 2, b.orden ?? 0, b.activa ?? true]);
-    return r.rows[0];
+    await guardarCausasMaquina(client, r.rows[0].id, b.causas);
+    await client.query('commit');
+    return { ...r.rows[0], causas: b.causas || [] };
   } catch (e) {
+    await client.query('rollback');
     return reply.code(400).send({ error: e.code === '23505' ? 'ya existe una máquina con ese código' : e.message });
+  } finally {
+    client.release();
   }
 });
 
 app.put('/api/maquinas/:id', async (req, reply) => {
   const b = req.body || {};
+  const client = await pool.connect();
   try {
-    const r = await q(
+    await client.query('begin');
+    const r = await client.query(
       `update maquinas set area_id = coalesce($2, area_id),
                            codigo = coalesce($3, codigo),
                            nombre = coalesce($4, nombre),
@@ -383,10 +409,36 @@ app.put('/api/maquinas/:id', async (req, reply) => {
         where id = $1 returning *`,
       [req.params.id, b.area_id ?? null, codigo(b.codigo) || null, texto(b.nombre), texto(b.nombre_corto, 40),
        b.criticidad ?? null, b.activa ?? null]);
-    if (!r.rowCount) return reply.code(404).send({ error: 'máquina no existe' });
+    if (!r.rowCount) {
+      await client.query('rollback');
+      return reply.code(404).send({ error: 'máquina no existe' });
+    }
+    if (Array.isArray(b.causas)) await guardarCausasMaquina(client, Number(req.params.id), b.causas);
+    await client.query('commit');
     return r.rows[0];
   } catch (e) {
+    await client.query('rollback');
     return reply.code(400).send({ error: e.code === '23505' ? 'código de máquina repetido' : e.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Nueva falla del catálogo (se puede crear desde el equipo).
+app.post('/api/causas', async (req, reply) => {
+  const b = req.body || {};
+  if (!b.categoria_id || !texto(b.descripcion)) {
+    return reply.code(400).send({ error: 'categoría y descripción son obligatorias' });
+  }
+  try {
+    const code = codigo(b.codigo) || await codigoUnico('codigos_causa', slug(b.descripcion));
+    const r = await q(
+      `insert into codigos_causa (codigo, categoria_id, descripcion, es_planificada)
+       values ($1, $2, $3, $4) returning *`,
+      [code, b.categoria_id, texto(b.descripcion, 120), !!b.es_planificada]);
+    return r.rows[0];
+  } catch (e) {
+    return reply.code(400).send({ error: e.code === '23505' ? 'esa falla ya existe' : e.message });
   }
 });
 

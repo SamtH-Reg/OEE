@@ -29,6 +29,7 @@ export const api = {
   editarMaquina: (id, b) => req(`/api/maquinas/${id}`, { method: 'PUT', body: JSON.stringify(b) }),
   crearEspecie: (b) => req('/api/especies', { method: 'POST', body: JSON.stringify(b) }),
   crearProducto: (b) => req('/api/productos', { method: 'POST', body: JSON.stringify(b) }),
+  crearCausa: (b) => req('/api/causas', { method: 'POST', body: JSON.stringify(b) }),
   crearReceta: (b) => req('/api/recetas', { method: 'POST', body: JSON.stringify(b) }),
   editarReceta: (id, b) => req(`/api/recetas/${id}`, { method: 'PUT', body: JSON.stringify(b) }),
   demo: () => req('/api/demo'),
