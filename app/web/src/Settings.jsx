@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from './api';
+import WizardLinea from './WizardLinea';
 
 const vacio = {
   linea: { codigo: '', nombre: '', descripcion: '', activa: true },
@@ -18,6 +19,7 @@ export default function Settings({ onClose, onTrama, onSaved }) {
   const [error, setError] = useState(null);
   const [guardando, setGuardando] = useState(false);
   const [nuevo, setNuevo] = useState(null);    // {tipo:'especie'|'producto', codigo, nombre}
+  const [wizard, setWizard] = useState(false);
 
   async function cargar() {
     try {
@@ -158,8 +160,11 @@ export default function Settings({ onClose, onTrama, onSaved }) {
           <>
             <div className="set-bar">
               <span className="set-count">{data.lineas.length} líneas</span>
-              <button className="btn-add" onClick={() => abrir('linea')}>＋ Nueva línea</button>
+              <button className="btn-add" onClick={() => setWizard(true)}>＋ Armar línea</button>
             </div>
+            <p className="set-hint">
+              «Armar línea» crea la línea, sus equipos y la receta en un solo recorrido de 3 pasos.
+            </p>
             <div className="set-list">
               {data.lineas.map(l => {
                 const n = data.trama.filter(t => t.linea_id === l.id).length;
@@ -244,6 +249,14 @@ export default function Settings({ onClose, onTrama, onSaved }) {
       </div>
 
       {/* -------- formularios -------- */}
+      {wizard && (
+        <WizardLinea
+          data={data}
+          onClose={() => setWizard(false)}
+          onSaved={async () => { await cargar(); onSaved && onSaved(); }}
+        />
+      )}
+
       {form && (
         <div className="form-layer">
           <div className="form-card"

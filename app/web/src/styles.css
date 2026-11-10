@@ -446,3 +446,64 @@ header{
 }
 
 .opt{font-size:11px;letter-spacing:.6px;color:var(--dim);font-weight:600;text-transform:none}
+
+/* ---------------- asistente: armar linea ---------------- */
+.wizard{position:fixed;inset:0;z-index:80;background:#fff;display:flex;flex-direction:column}
+.wz-head{padding:18px 28px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:24px}
+.wz-kicker{font-size:11px;letter-spacing:2.6px;text-transform:uppercase;color:var(--accent);font-weight:700}
+.wz-head h2{margin:4px 0 0;font-size:26px;letter-spacing:-.4px}
+.wz-steps{display:flex;gap:8px;margin-left:auto}
+.wz-step{display:flex;align-items:center;gap:9px;height:52px;padding:0 18px;border-radius:12px;
+         border:1px solid var(--line);background:var(--panel2);color:var(--muted);font:600 14.5px inherit;cursor:pointer}
+.wz-step span{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:#E3EAF2;
+              font-size:13px;color:#54708A}
+.wz-step.on{border-color:var(--accent);background:var(--accent-bg);color:var(--accent)}
+.wz-step.on span{background:var(--accent);color:#fff}
+.wz-step.done{border-color:#BFE3CF;background:var(--ok-bg);color:#0C6B3F}
+.wz-step.done span{background:#12A35E;color:#fff}
+.wz-body{flex:1;overflow:auto;padding:26px 28px;display:flex;justify-content:center}
+.wz-card{width:min(920px,100%);display:flex;flex-direction:column;gap:18px}
+.wz-help{margin:0;color:var(--muted);font-size:14.5px;line-height:1.55;background:var(--panel2);
+         border:1px solid var(--line);border-radius:12px;padding:12px 16px}
+.wz-field{display:flex;flex-direction:column;gap:8px;font-size:13.5px;color:var(--muted);font-weight:600}
+.wz-field input,.wz-field select{height:58px;border:1px solid var(--line);border-radius:12px;padding:0 16px;
+                                 font:16px inherit;color:var(--ink);background:#fff;width:100%}
+.wz-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.wz-rows{display:flex;flex-direction:column;gap:10px}
+.wz-row{display:flex;align-items:center;gap:10px;background:var(--panel2);border:1px solid var(--line);
+        border-radius:14px;padding:10px 12px;flex-wrap:wrap}
+.wz-pos{width:30px;text-align:center;font:700 15px ui-monospace,monospace;color:var(--dim)}
+.wz-sel{height:52px;border-radius:11px;border:1px solid var(--line);background:#fff;font:15px inherit;
+        padding:0 12px;min-width:180px;flex:1}
+.wz-sel.sm{min-width:128px;flex:0 0 auto}
+.wz-input{height:52px;border-radius:11px;border:1px solid var(--line);background:#fff;font:15px inherit;
+          padding:0 12px;flex:1.4;min-width:168px}
+.wz-cuello{display:flex;align-items:center;gap:7px;height:52px;padding:0 14px;border-radius:11px;
+           border:1px solid var(--line);background:#fff;font-size:13px;color:var(--muted);cursor:pointer;white-space:nowrap}
+.wz-cuello.on{border-color:#E0C48C;background:var(--plan-bg);color:var(--plan)}
+.wz-cuello input{width:20px;height:20px;accent-color:var(--amber)}
+.wz-acc{display:flex;gap:6px}
+.wz-acc button{width:46px;height:46px;border-radius:10px;border:1px solid var(--line);background:#fff;
+               cursor:pointer;font-size:16px;color:var(--ink)}
+.wz-acc button:disabled{opacity:.3;cursor:default}
+.wz-add{height:56px;border-radius:12px;border:1px dashed var(--line2);background:#fff;color:var(--accent);
+        font:600 15.5px inherit;cursor:pointer}
+.wz-count{margin:0;color:var(--dim);font-size:13px}
+.wz-check{display:flex;align-items:center;gap:12px;font-size:16px;font-weight:500;color:var(--ink);
+          background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:16px;cursor:pointer}
+.wz-check input{width:24px;height:24px;accent-color:var(--accent)}
+.wz-dist{border-top:1px solid var(--line);padding-top:16px;display:flex;flex-direction:column;gap:10px}
+.wz-dist-h{font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--dim);font-weight:700}
+.wz-dist-row{display:flex;align-items:center;gap:12px;background:var(--panel2);border:1px solid var(--line);
+             border-radius:11px;padding:10px 14px;font-size:15px}
+.wz-dist-row>span:first-child{flex:1}
+.wz-foot{flex:0 0 auto;display:flex;justify-content:flex-end;gap:12px;padding:16px 28px;
+         border-top:1px solid var(--line);background:var(--panel)}
+@media (max-width:900px){
+  .wz-grid{grid-template-columns:1fr}
+  .wz-steps{display:none}
+  .wz-head{flex-wrap:wrap}
+}
+
+.lbl{display:block}
+.lbl em{font-style:normal;font-weight:500;color:var(--dim);font-size:12.5px;margin-left:6px}

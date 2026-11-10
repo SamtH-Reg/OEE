@@ -464,10 +464,11 @@ async function guardarReceta(id, b) {
 
 app.post('/api/recetas', async (req, reply) => {
   const b = req.body || {};
-  if (!codigo(b.codigo) || !texto(b.nombre)) {
-    return reply.code(400).send({ error: 'código y nombre son obligatorios' });
+  if (!texto(b.nombre)) {
+    return reply.code(400).send({ error: 'el nombre es obligatorio' });
   }
   try {
+    b.codigo = codigo(b.codigo) || await codigoUnico('recetas', slug(b.nombre));
     const id = await guardarReceta(null, b);
     return { id };
   } catch (e) {

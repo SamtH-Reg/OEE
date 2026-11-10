@@ -89,6 +89,17 @@ Botón de engranaje en la cabecera → panel **Ajustes** con tres pestañas:
 
 ![Ajustes](captura-ajustes.png)
 
+### Armar una línea en 3 pasos
+
+El botón **«＋ Armar línea»** abre un asistente que crea todo de una vez, sin saltar entre pestañas:
+
+1. **La línea** — nombre y descripción (el código se genera solo).
+2. **Sus equipos** — se agregan en orden; cada fila puede ser un equipo existente o uno nuevo
+   (se escribe el nombre y se elige el área). Se marca cuál es el **cuello de línea**.
+3. **La receta** — especie, producto, toneladas por turno, rendimiento y distribución % por equipo.
+
+Al terminar quedan creados la línea, sus equipos, la trama y la receta.
+
 | Pestaña | Qué permite |
 |---|---|
 | **Líneas** | Crear líneas (el código es opcional: se genera desde el nombre), editar nombre/descripción, activar o desactivar desde el formulario, y abrir la trama para agregar, quitar y reordenar máquinas y marcar el cuello de botella. |
