@@ -106,6 +106,21 @@ antiguas siguen apuntando a esa máquina. Igual criterio para líneas y recetas.
   de esa línea (ej. fileteadora 65%, túnel 35%).
 - `v_recetas` entrega la receta ya resuelta para el panel.
 
+## Despliegue local
+
+La app queda corriendo en **http://localhost:8787** (el mismo proceso sirve la API y la PWA).
+
+| Archivo | Uso |
+|---|---|
+| `iniciar.bat` | Doble clic: compila si falta `web/dist`, abre el navegador y levanta el servidor. |
+| `detener.bat` | Libera el puerto 8787. |
+
+- Requiere `app/.env` con `DATABASE_URL` (copiar de `app/.env.example`).
+- El puerto se cambia con `PORT` en `app/.env`.
+- Los datos viven en Neon: reiniciar el servidor o el PC no pierde nada; las paradas que quedaron en la
+  cola de la tablet se sincronizan al volver.
+- Para que arranque solo al iniciar sesión: una tarea programada de Windows que ejecute `iniciar.bat`.
+
 ## App funcional
 
 La app corre contra la misma base de Neon (no hay mock).

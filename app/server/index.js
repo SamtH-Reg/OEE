@@ -41,6 +41,9 @@ async function asegurarDispositivo(id) {
 
 // ---------------- catálogo ----------------
 app.get('/api/catalogo', async () => {
+  // El turno se asegura en una sentencia aparte: si se llamara dentro del SELECT,
+  // la fila recién insertada no sería visible para esa misma sentencia.
+  await q('select fn_asegurar_turno(now())');
   const [areas, maquinas, categorias, causas, turno] = await Promise.all([
     q('select id, codigo, nombre from areas where activa order by orden, nombre'),
     q(`select id, area_id, codigo, nombre, nombre_corto, criticidad
