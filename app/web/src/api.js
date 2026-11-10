@@ -31,6 +31,7 @@ export const api = {
   crearArea: (b) => req('/api/areas', { method: 'POST', body: JSON.stringify(b) }),
   editarArea: (id, b) => req(`/api/areas/${id}`, { method: 'PUT', body: JSON.stringify(b) }),
   eliminarMaquina: (id) => req(`/api/maquinas/${id}`, { method: 'DELETE' }),
+  copiarMaquina: (id, b) => req(`/api/maquinas/${id}/copiar`, { method: 'POST', body: JSON.stringify(b) }),
   crearReceta: (b) => req('/api/recetas', { method: 'POST', body: JSON.stringify(b) }),
   editarReceta: (id, b) => req(`/api/recetas/${id}`, { method: 'PUT', body: JSON.stringify(b) }),
   demo: () => req('/api/demo'),

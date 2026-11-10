@@ -545,6 +545,45 @@ app.put('/api/maquinas/:id', async (req, reply) => {
   }
 });
 
+// Copiar un equipo (con sus fallas asignadas) para armar líneas equivalentes.
+app.post('/api/maquinas/:id/copiar', async (req, reply) => {
+  const id = Number(req.params.id);
+  const b = req.body || {};
+  const client = await pool.connect();
+  try {
+    await client.query('begin');
+    const o = await client.query('select * from maquinas where id = $1', [id]);
+    if (!o.rowCount) {
+      await client.query('rollback');
+      return reply.code(404).send({ error: 'máquina no existe' });
+    }
+    const M = o.rows[0];
+    const nombre = texto(b.nombre, 80) || `${M.nombre} (copia)`;
+    const code = codigo(b.codigo) || await codigoUnico('maquinas', slug(nombre));
+    const r = await client.query(
+      `insert into maquinas (area_id, codigo, nombre, nombre_corto, criticidad, orden, activa)
+       values ($1, $2, $3, $4, $5,
+               (select coalesce(max(orden), 0) + 1 from maquinas where area_id = $1), $6)
+       returning *`,
+      [b.area_id ?? M.area_id, code, nombre,
+       texto(b.nombre_corto, 40) || `${M.nombre_corto} (copia)`, M.criticidad, M.activa]);
+
+    if (b.copiar_fallas !== false) {
+      await client.query(
+        `insert into maquina_causas (maquina_id, codigo_causa_id)
+         select $1, codigo_causa_id from maquina_causas where maquina_id = $2`,
+        [r.rows[0].id, id]);
+    }
+    await client.query('commit');
+    return r.rows[0];
+  } catch (e) {
+    await client.query('rollback');
+    return reply.code(400).send({ error: e.code === '23505' ? 'código repetido' : e.message });
+  } finally {
+    client.release();
+  }
+});
+
 // Eliminar equipo: solo si no tiene historial. Si lo tiene, se ofrece desactivar.
 app.delete('/api/maquinas/:id', async (req, reply) => {
   const id = Number(req.params.id);

@@ -27,6 +27,7 @@ export default function Settings({ onClose, onTrama, onSaved }) {
   const [areasEdit, setAreasEdit] = useState(null);
   const [borrar, setBorrar] = useState(null);
   const [copiar, setCopiar] = useState(null);
+  const [copiarMaq, setCopiarMaq] = useState(null);
   const [aviso, setAviso] = useState(null);
 
   async function cargar() {
@@ -143,6 +144,35 @@ export default function Settings({ onClose, onTrama, onSaved }) {
       onSaved && onSaved();
     } catch (e) {
       setCopiar(prev => ({ ...prev, guardando: false, error: e.message }));
+    }
+  }
+
+  function abrirCopiarMaquina(m) {
+    setCopiarMaq({
+      maquina: m,
+      nombre: `${m.nombre} (copia)`,
+      nombre_corto: `${m.nombre_corto} (copia)`,
+      area_id: m.area_id,
+      fallas: true,
+      guardando: false
+    });
+  }
+
+  async function copiarEquipo() {
+    setCopiarMaq(prev => ({ ...prev, guardando: true }));
+    try {
+      const r = await api.copiarMaquina(copiarMaq.maquina.id, {
+        nombre: copiarMaq.nombre,
+        nombre_corto: copiarMaq.nombre_corto,
+        area_id: Number(copiarMaq.area_id),
+        copiar_fallas: copiarMaq.fallas
+      });
+      setCopiarMaq(null);
+      setAviso(`Equipo copiado: ${r.nombre} (${r.codigo}).`);
+      await cargar();
+      onSaved && onSaved();
+    } catch (e) {
+      setCopiarMaq(prev => ({ ...prev, guardando: false, error: e.message }));
     }
   }
 
@@ -330,6 +360,7 @@ export default function Settings({ onClose, onTrama, onSaved }) {
                           <small>{m.nombre_corto} · criticidad {m.criticidad}{m.activa ? '' : ' · inactiva'}</small>
                         </div>
                         <button className="btn-ghost" onClick={() => abrir('maquina', m)}>Editar</button>
+                        <button className="btn-ghost" onClick={() => abrirCopiarMaquina(m)}>Copiar</button>
                         <button className="btn-ghost danger"
                                 onClick={() => setBorrar({ ...m, paradas: m.paradas || 0 })}>Eliminar</button>
                       </div>
@@ -641,6 +672,49 @@ export default function Settings({ onClose, onTrama, onSaved }) {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {copiarMaq && (
+        <div className="form-layer">
+          <div className="form-card mini-card">
+            <div className="form-head">
+              <h3>Copiar equipo</h3>
+              <button className="x" onClick={() => setCopiarMaq(null)}>✕</button>
+            </div>
+            <div className="form-grid">
+              <label className="wide">Nombre
+                <input autoFocus value={copiarMaq.nombre}
+                       onChange={e => setCopiarMaq({ ...copiarMaq, nombre: e.target.value })} />
+              </label>
+              <label>Nombre corto
+                <input value={copiarMaq.nombre_corto}
+                       onChange={e => setCopiarMaq({ ...copiarMaq, nombre_corto: e.target.value })} />
+              </label>
+              <label>Área
+                <select value={copiarMaq.area_id}
+                        onChange={e => setCopiarMaq({ ...copiarMaq, area_id: Number(e.target.value) })}>
+                  {data.areas.map(a => <option key={a.id} value={a.id}>{a.nombre}</option>)}
+                </select>
+              </label>
+            </div>
+
+            <label className="wz-check" style={{ marginTop: 12 }}>
+              <input type="checkbox" checked={copiarMaq.fallas}
+                     onChange={e => setCopiarMaq({ ...copiarMaq, fallas: e.target.checked })} />
+              Copiar sus fallas posibles
+            </label>
+
+            {copiarMaq.error && <div className="form-error">{copiarMaq.error}</div>}
+
+            <div className="form-foot">
+              <button className="ghost" onClick={() => setCopiarMaq(null)}>Cancelar</button>
+              <button className="btn-go small" onClick={copiarEquipo}
+                      disabled={copiarMaq.guardando || !copiarMaq.nombre.trim()}>
+                {copiarMaq.guardando ? 'Copiando…' : 'Copiar equipo'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
