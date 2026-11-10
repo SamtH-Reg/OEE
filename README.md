@@ -110,6 +110,17 @@ Al terminar quedan creados la línea, sus equipos, la trama y la receta.
 Un equipo desactivado deja de aparecer en el tablero pero conserva su historial: las paradas
 antiguas siguen apuntando a esa máquina. Igual criterio para líneas y recetas.
 
+### Copiar una línea
+
+El botón **Copiar** de cada línea duplica la configuración completa: nombre nuevo, misma descripción,
+**la trama en el mismo orden** con su cuello de línea y, opcionalmente:
+
+- **equipos nuevos** (con sufijo, ej. «Cinta 1 (copia)») para que la copia no comparta máquinas con la
+  original — es el caso de dos líneas físicas que hacen lo mismo;
+- **las recetas** de la línea, con su distribución ya apuntando a los equipos nuevos.
+
+Si se desmarca «crear equipos nuevos», la copia usa las mismas máquinas que la original.
+
 ### Fallas por equipo
 
 En el formulario del equipo, la sección **«Fallas posibles de este equipo»** lista el catálogo por

@@ -320,6 +320,94 @@ async function codigoUnico(tabla, base) {
   return `${base}-${Date.now().toString().slice(-4)}`;
 }
 
+// Copiar una línea con su configuración: trama y, opcionalmente, equipos y recetas.
+app.post('/api/lineas/:id/copiar', async (req, reply) => {
+  const id = Number(req.params.id);
+  const b = req.body || {};
+  const duplicar = b.duplicar_equipos !== false;
+  const copiarRecetas = b.copiar_recetas !== false;
+  const sufijo = texto(b.sufijo, 24) || ' (copia)';
+
+  const client = await pool.connect();
+  try {
+    await client.query('begin');
+    const orig = await client.query('select * from lineas where id = $1', [id]);
+    if (!orig.rowCount) {
+      await client.query('rollback');
+      return reply.code(404).send({ error: 'línea no existe' });
+    }
+    const L = orig.rows[0];
+    const nombre = texto(b.nombre, 80) || `${L.nombre}${sufijo}`;
+    const nuevoCodigo = codigo(b.codigo) || await codigoUnico('lineas', slug(nombre));
+
+    const nueva = await client.query(
+      `insert into lineas (codigo, nombre, descripcion, orden)
+       values ($1, $2, $3, (select coalesce(max(orden), 0) + 1 from lineas))
+       returning *`,
+      [nuevoCodigo, nombre, L.descripcion]);
+    const lineaId = nueva.rows[0].id;
+
+    const trama = await client.query(
+      'select * from linea_maquinas where linea_id = $1 order by posicion', [id]);
+    const mapa = new Map();
+
+    for (const t of trama.rows) {
+      let maquinaId = t.maquina_id;
+      if (duplicar) {
+        const m = await client.query('select * from maquinas where id = $1', [t.maquina_id]);
+        const M = m.rows[0];
+        const cod = await codigoUnico('maquinas', slug(`${M.nombre_corto || M.nombre}${sufijo}`));
+        const nm = await client.query(
+          `insert into maquinas (area_id, codigo, nombre, nombre_corto, criticidad, orden, activa)
+           values ($1, $2, $3, $4, $5,
+                   (select coalesce(max(orden), 0) + 1 from maquinas where area_id = $1), true)
+           returning id`,
+          [M.area_id, cod, `${M.nombre}${sufijo}`, `${M.nombre_corto}${sufijo}`, M.criticidad]);
+        maquinaId = nm.rows[0].id;
+        await client.query(
+          `insert into maquina_causas (maquina_id, codigo_causa_id)
+           select $1, codigo_causa_id from maquina_causas where maquina_id = $2`,
+          [maquinaId, t.maquina_id]);
+      }
+      mapa.set(t.maquina_id, maquinaId);
+      await client.query(
+        `insert into linea_maquinas (linea_id, maquina_id, posicion, detiene_linea)
+         values ($1, $2, $3, $4)`,
+        [lineaId, maquinaId, t.posicion, t.detiene_linea]);
+    }
+
+    let recetas = 0;
+    if (copiarRecetas) {
+      const rs = await client.query('select * from recetas where linea_id = $1', [id]);
+      for (const r of rs.rows) {
+        const codR = await codigoUnico('recetas', slug(`${r.codigo}-C`));
+        const nr = await client.query(
+          `insert into recetas (codigo, nombre, especie_id, producto_id, linea_id,
+                                toneladas_turno, rendimiento_pct, vigente_desde, vigente_hasta, activa, notas)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) returning id`,
+          [codR, `${r.nombre}${sufijo}`, r.especie_id, r.producto_id, lineaId,
+           r.toneladas_turno, r.rendimiento_pct, r.vigente_desde, r.vigente_hasta, r.activa, r.notas]);
+
+        const dist = await client.query('select * from receta_maquinas where receta_id = $1', [r.id]);
+        for (const d of dist.rows) {
+          await client.query(
+            `insert into receta_maquinas (receta_id, maquina_id, porcentaje) values ($1, $2, $3)`,
+            [nr.rows[0].id, mapa.get(d.maquina_id) || d.maquina_id, d.porcentaje]);
+        }
+        recetas += 1;
+      }
+    }
+
+    await client.query('commit');
+    return { ok: true, linea_id: lineaId, codigo: nuevoCodigo, nombre, maquinas: trama.rowCount, recetas };
+  } catch (e) {
+    await client.query('rollback');
+    return reply.code(400).send({ error: e.code === '23505' ? 'código repetido, probá otro nombre' : e.message });
+  } finally {
+    client.release();
+  }
+});
+
 app.post('/api/lineas', async (req, reply) => {
   const b = req.body || {};
   if (!texto(b.nombre)) {

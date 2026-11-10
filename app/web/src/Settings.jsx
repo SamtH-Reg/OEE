@@ -26,6 +26,8 @@ export default function Settings({ onClose, onTrama, onSaved }) {
   const [nuevaFalla, setNuevaFalla] = useState(null);
   const [areasEdit, setAreasEdit] = useState(null);
   const [borrar, setBorrar] = useState(null);
+  const [copiar, setCopiar] = useState(null);
+  const [aviso, setAviso] = useState(null);
 
   async function cargar() {
     try {
@@ -112,6 +114,35 @@ export default function Settings({ onClose, onTrama, onSaved }) {
       onSaved && onSaved();
     } catch (e) {
       setError(e.message);
+    }
+  }
+
+  function abrirCopiar(l) {
+    setCopiar({
+      linea: l,
+      nombre: `${l.nombre} · copia`,
+      sufijo: ' (copia)',
+      duplicar: true,
+      recetas: true,
+      guardando: false
+    });
+  }
+
+  async function copiarLinea() {
+    setCopiar(prev => ({ ...prev, guardando: true }));
+    try {
+      const r = await api.copiarLinea(copiar.linea.id, {
+        nombre: copiar.nombre,
+        sufijo: copiar.sufijo,
+        duplicar_equipos: copiar.duplicar,
+        copiar_recetas: copiar.recetas
+      });
+      setCopiar(null);
+      setAviso(`Línea copiada: ${r.nombre} · ${r.maquinas} equipos${r.recetas ? ` y ${r.recetas} receta(s)` : ''}.`);
+      await cargar();
+      onSaved && onSaved();
+    } catch (e) {
+      setCopiar(prev => ({ ...prev, guardando: false, error: e.message }));
     }
   }
 
@@ -244,6 +275,7 @@ export default function Settings({ onClose, onTrama, onSaved }) {
 
       <div className="set-body">
         {error && <div className="aviso error">{error}</div>}
+        {aviso && <div className="aviso">{aviso}</div>}
 
         {/* -------- líneas -------- */}
         {tab === 'lineas' && (
@@ -267,6 +299,7 @@ export default function Settings({ onClose, onTrama, onSaved }) {
                     </div>
                     <button className="btn-ghost" onClick={() => onTrama(l)}>Trama</button>
                     <button className="btn-ghost" onClick={() => abrir('linea', l)}>Editar</button>
+                    <button className="btn-ghost" onClick={() => abrirCopiar(l)}>Copiar</button>
                   </div>
                 );
               })}
@@ -608,6 +641,68 @@ export default function Settings({ onClose, onTrama, onSaved }) {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {copiar && (
+        <div className="form-layer">
+          <div className="form-card mini-card">
+            <div className="form-head">
+              <h3>Copiar línea</h3>
+              <button className="x" onClick={() => setCopiar(null)}>✕</button>
+            </div>
+
+            <pre className="copy-preview">
+              {copiar.linea.nombre}
+              {'\n'}└ trama: {data.trama.filter(t => t.linea_id === copiar.linea.id).length} equipos en el mismo orden
+              {'\n'}└ cuello: {data.trama.find(t => t.linea_id === copiar.linea.id && t.detiene_linea)?.maquina_id
+                ? (data.maquinas.find(m => m.id === data.trama.find(t => t.linea_id === copiar.linea.id && t.detiene_linea).maquina_id)?.nombre_corto || '—')
+                : 'sin cuello marcado'}
+            </pre>
+
+            <div className="form-grid">
+              <label className="wide">Nombre de la copia
+                <input autoFocus value={copiar.nombre}
+                       onChange={e => setCopiar({ ...copiar, nombre: e.target.value })} />
+              </label>
+            </div>
+
+            <label className="wz-check" style={{ marginTop: 10 }}>
+              <input type="checkbox" checked={copiar.duplicar}
+                     onChange={e => setCopiar({ ...copiar, duplicar: e.target.checked })} />
+              Crear equipos nuevos (no comparte las máquinas con la original)
+            </label>
+
+            {copiar.duplicar && (
+              <label className="wz-field" style={{ marginTop: 10 }}>
+                <span className="lbl">Sufijo para los equipos nuevos</span>
+                <input value={copiar.sufijo}
+                       onChange={e => setCopiar({ ...copiar, sufijo: e.target.value })} />
+              </label>
+            )}
+
+            <label className="wz-check" style={{ marginTop: 10 }}>
+              <input type="checkbox" checked={copiar.recetas}
+                     onChange={e => setCopiar({ ...copiar, recetas: e.target.checked })} />
+              Copiar también las recetas de la línea
+            </label>
+
+            <p className="set-hint">
+              {copiar.duplicar
+                ? `Los equipos se crean como «nombre${copiar.sufijo}» y después podés renombrarlos en Equipos.`
+                : 'La copia usará los mismos equipos que la línea original.'}
+            </p>
+
+            {copiar.error && <div className="form-error">{copiar.error}</div>}
+
+            <div className="form-foot">
+              <button className="ghost" onClick={() => setCopiar(null)}>Cancelar</button>
+              <button className="btn-go small" onClick={copiarLinea}
+                      disabled={copiar.guardando || !copiar.nombre.trim()}>
+                {copiar.guardando ? 'Copiando…' : 'Copiar línea'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
