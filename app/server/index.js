@@ -279,8 +279,9 @@ app.get('/api/settings', async () => {
   const [areas, maquinas, lineas, trama, especies, productos, recetas, distribucion,
          causas, categorias, maquinaCausas] = await Promise.all([
     q('select id, codigo, nombre, orden, activa from areas order by orden, nombre'),
-    q(`select id, area_id, codigo, nombre, nombre_corto, criticidad, activa
-         from maquinas order by area_id, orden, codigo`),
+    q(`select m.id, m.area_id, m.codigo, m.nombre, m.nombre_corto, m.criticidad, m.activa,
+              (select count(*) from registro_paradas p where p.maquina_id = m.id)::int as paradas
+         from maquinas m order by m.area_id, m.orden, m.codigo`),
     q('select id, codigo, nombre, descripcion, orden, activa from lineas order by orden, codigo'),
     q(`select linea_id, maquina_id, posicion, detiene_linea from linea_maquinas order by linea_id, posicion`),
     q('select id, codigo, nombre, activa from especies order by nombre'),
@@ -451,6 +452,34 @@ app.put('/api/maquinas/:id', async (req, reply) => {
   } catch (e) {
     await client.query('rollback');
     return reply.code(400).send({ error: e.code === '23505' ? 'código de máquina repetido' : e.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Eliminar equipo: solo si no tiene historial. Si lo tiene, se ofrece desactivar.
+app.delete('/api/maquinas/:id', async (req, reply) => {
+  const id = Number(req.params.id);
+  const cuenta = await q('select count(*)::int n from registro_paradas where maquina_id = $1', [id]);
+  if (cuenta.rows[0].n > 0) {
+    return reply.code(409).send({
+      error: `tiene ${cuenta.rows[0].n} parada(s) registradas`,
+      paradas: cuenta.rows[0].n
+    });
+  }
+  const client = await pool.connect();
+  try {
+    await client.query('begin');
+    await client.query('delete from maquina_causas where maquina_id = $1', [id]);
+    await client.query('delete from receta_maquinas where maquina_id = $1', [id]);
+    await client.query('delete from linea_maquinas where maquina_id = $1', [id]);
+    const r = await client.query('delete from maquinas where id = $1 returning id', [id]);
+    await client.query('commit');
+    if (!r.rowCount) return reply.code(404).send({ error: 'máquina no existe' });
+    return { ok: true };
+  } catch (e) {
+    await client.query('rollback');
+    return reply.code(400).send({ error: e.message });
   } finally {
     client.release();
   }

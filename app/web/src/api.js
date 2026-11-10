@@ -1,14 +1,11 @@
 const TOKEN = 'demo';
 
 async function req(path, opciones = {}) {
-  const res = await fetch(path, {
-    ...opciones,
-    headers: {
-      'content-type': 'application/json',
-      'x-app-token': TOKEN,
-      ...(opciones.headers || {})
-    }
-  });
+  // el content-type solo va si hay cuerpo: Fastify rechaza un DELETE con
+  // content-type json y body vacío
+  const headers = { 'x-app-token': TOKEN, ...(opciones.headers || {}) };
+  if (opciones.body) headers['content-type'] = 'application/json';
+  const res = await fetch(path, { ...opciones, headers });
   const texto = await res.text();
   const data = texto ? JSON.parse(texto) : null;
   if (!res.ok) throw new Error((data && data.error) || `HTTP ${res.status}`);
@@ -32,6 +29,7 @@ export const api = {
   crearCausa: (b) => req('/api/causas', { method: 'POST', body: JSON.stringify(b) }),
   crearArea: (b) => req('/api/areas', { method: 'POST', body: JSON.stringify(b) }),
   editarArea: (id, b) => req(`/api/areas/${id}`, { method: 'PUT', body: JSON.stringify(b) }),
+  eliminarMaquina: (id) => req(`/api/maquinas/${id}`, { method: 'DELETE' }),
   crearReceta: (b) => req('/api/recetas', { method: 'POST', body: JSON.stringify(b) }),
   editarReceta: (id, b) => req(`/api/recetas/${id}`, { method: 'PUT', body: JSON.stringify(b) }),
   demo: () => req('/api/demo'),

@@ -25,6 +25,7 @@ export default function Settings({ onClose, onTrama, onSaved }) {
   const [borrando, setBorrando] = useState(false);
   const [nuevaFalla, setNuevaFalla] = useState(null);
   const [areasEdit, setAreasEdit] = useState(null);
+  const [borrar, setBorrar] = useState(null);
 
   async function cargar() {
     try {
@@ -107,6 +108,29 @@ export default function Settings({ onClose, onTrama, onSaved }) {
       data.areas = fresca.areas;
       data.maquinas = fresca.maquinas;
       setAreasEdit(fresca.areas.map(x => ({ ...x })));
+      await cargar();
+      onSaved && onSaved();
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
+  async function eliminarEquipo() {
+    try {
+      await api.eliminarMaquina(borrar.id);
+      setBorrar(null);
+      await cargar();
+      onSaved && onSaved();
+    } catch (e) {
+      setError(e.message);
+      setBorrar(null);
+    }
+  }
+
+  async function desactivarEnLugar() {
+    try {
+      await api.editarMaquina(borrar.id, { activa: false });
+      setBorrar(null);
       await cargar();
       onSaved && onSaved();
     } catch (e) {
@@ -273,6 +297,8 @@ export default function Settings({ onClose, onTrama, onSaved }) {
                           <small>{m.nombre_corto} · criticidad {m.criticidad}{m.activa ? '' : ' · inactiva'}</small>
                         </div>
                         <button className="btn-ghost" onClick={() => abrir('maquina', m)}>Editar</button>
+                        <button className="btn-ghost danger"
+                                onClick={() => setBorrar({ ...m, paradas: m.paradas || 0 })}>Eliminar</button>
                       </div>
                     ))}
                   </div>
@@ -582,6 +608,36 @@ export default function Settings({ onClose, onTrama, onSaved }) {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {borrar && (
+        <div className="form-layer">
+          <div className="form-card mini-card">
+            <div className="form-head">
+              <h3>{borrar.paradas > 0 ? 'No se puede eliminar' : 'Eliminar equipo'}</h3>
+              <button className="x" onClick={() => setBorrar(null)}>✕</button>
+            </div>
+            {borrar.paradas > 0 ? (
+              <p className="set-hint">
+                <b>{borrar.nombre}</b> tiene <b>{borrar.paradas} parada(s)</b> registradas. Si se elimina,
+                se pierde ese historial y los indicadores dejan de cuadrar.
+                <br /><br />
+                Conviene <b>desactivarlo</b>: deja de aparecer en el tablero y conserva todas sus paradas.
+              </p>
+            ) : (
+              <p className="set-hint">
+                ¿Eliminar <b>{borrar.nombre}</b>?<br /><br />
+                Se quita de su línea y de las recetas. Esta acción no se puede deshacer.
+              </p>
+            )}
+            <div className="form-foot">
+              <button className="ghost" onClick={() => setBorrar(null)}>Cancelar</button>
+              {borrar.paradas > 0
+                ? <button className="btn-danger" onClick={desactivarEnLugar}>Desactivar equipo</button>
+                : <button className="btn-danger" onClick={eliminarEquipo}>Sí, eliminar</button>}
+            </div>
+          </div>
         </div>
       )}
 

@@ -580,3 +580,6 @@ header{
 }
 .area-row input.ord{flex:0 0 92px;text-align:center}
 .area-row .badge.sm{min-width:74px}
+
+.btn-ghost.danger{color:var(--stop);border-color:#EFC4BF}
+.btn-ghost.danger:hover{background:var(--stop-bg)}
