@@ -71,13 +71,13 @@ app.get('/api/catalogo', async () => {
 app.get('/api/lineas', async () => {
   const [lineas, trama] = await Promise.all([
     q('select * from v_linea_estado'),
-    q(`select lm.linea_id, lm.posicion, lm.detiene_linea,
+    q(`select lm.linea_id, lm.posicion, lm.rama, lm.detiene_linea,
               m.id as maquina_id, m.codigo, m.nombre, m.nombre_corto, m.criticidad,
               a.nombre as area
          from linea_maquinas lm
          join maquinas m on m.id = lm.maquina_id
          join areas a on a.id = m.area_id
-        order by lm.linea_id, lm.posicion`)
+        order by lm.linea_id, lm.posicion, lm.rama`)
   ]);
   return { lineas: lineas.rows, trama: trama.rows };
 });
@@ -105,9 +105,12 @@ app.put('/api/lineas/:id/trama', async (req, reply) => {
     await client.query('delete from linea_maquinas where linea_id = $1', [lineaId]);
     for (let i = 0; i < maquinas.length; i++) {
       await client.query(
-        `insert into linea_maquinas (linea_id, maquina_id, posicion, detiene_linea)
-         values ($1, $2, $3, $4)`,
-        [lineaId, maquinas[i].maquina_id, i + 1, Boolean(maquinas[i].detiene_linea)]
+        `insert into linea_maquinas (linea_id, maquina_id, posicion, rama, detiene_linea)
+         values ($1, $2, $3, $4, $5)`,
+        [lineaId, maquinas[i].maquina_id,
+         maquinas[i].posicion ?? i + 1,
+         maquinas[i].rama ?? 1,
+         Boolean(maquinas[i].detiene_linea)]
       );
     }
     await client.query('commit');
@@ -289,7 +292,8 @@ app.get('/api/settings', async () => {
          left join especies e on e.id = l.especie_id
          left join productos p on p.id = l.producto_id
         order by l.orden, l.codigo`),
-    q(`select linea_id, maquina_id, posicion, detiene_linea from linea_maquinas order by linea_id, posicion`),
+    q(`select linea_id, maquina_id, posicion, rama, detiene_linea
+         from linea_maquinas order by linea_id, posicion, rama`),
     q('select id, codigo, nombre, activa from especies order by nombre'),
     q('select id, codigo, nombre, especie_id, activo from productos order by nombre'),
     q('select * from v_recetas'),
@@ -398,9 +402,9 @@ app.post('/api/lineas/:id/copiar', async (req, reply) => {
       }
       mapa.set(t.maquina_id, maquinaId);
       await client.query(
-        `insert into linea_maquinas (linea_id, maquina_id, posicion, detiene_linea)
-         values ($1, $2, $3, $4)`,
-        [lineaId, maquinaId, t.posicion, t.detiene_linea]);
+        `insert into linea_maquinas (linea_id, maquina_id, posicion, rama, detiene_linea)
+         values ($1, $2, $3, $4, $5)`,
+        [lineaId, maquinaId, t.posicion, t.rama || 1, t.detiene_linea]);
     }
 
     let recetas = 0;
@@ -810,8 +814,8 @@ app.get('/api/recetas/:id/proceso', async (req, reply) => {
     q('select * from v_receta_etapas where receta_id = $1 order by orden, id', [id]),
     q(`select m.id, m.codigo, m.nombre_corto, m.criticidad, m.area_id, a.nombre as area
          from maquinas m join areas a on a.id = m.area_id where m.activa`),
-    q(`select lm.linea_id, lm.maquina_id, lm.posicion, lm.detiene_linea
-         from linea_maquinas lm order by lm.linea_id, lm.posicion`)
+    q(`select lm.linea_id, lm.maquina_id, lm.posicion, lm.rama, lm.detiene_linea
+         from linea_maquinas lm order by lm.linea_id, lm.posicion, lm.rama`)
   ]);
 
   const porId = new Map(maquinas.rows.map(m => [m.id, m]));

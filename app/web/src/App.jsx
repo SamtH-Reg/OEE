@@ -236,10 +236,23 @@ export default function App() {
       .sort((a, b) => a.posicion - b.posicion)
       .map(t => {
         const m = maqs.find(x => x.id === t.maquina_id);
-        return m ? { ...m, posicion: t.posicion } : null;
+        return m ? { ...m, posicion: t.posicion, rama: t.rama || 1 } : null;
       })
       .filter(Boolean);
   }, [lineaActual, trama, maqs]);
+
+  // columnas de la línea: cada etapa con sus ramas en paralelo
+  const columnasLinea = useMemo(() => {
+    const mapa = new Map();
+    for (const m of maquinasLinea) {
+      if (!mapa.has(m.posicion)) mapa.set(m.posicion, []);
+      mapa.get(m.posicion).push(m);
+    }
+    return [...mapa.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([pos, filas]) => ({ pos, filas: filas.sort((x, y) => x.rama - y.rama) }));
+  }, [maquinasLinea]);
+
 
   // ---- acciones ----
   function tocar(m, est) {
@@ -326,6 +339,19 @@ export default function App() {
     setToast(null);
   }
 
+  // columnas del editor: etapa -> ramas apiladas
+  const columnasEditor = useMemo(() => {
+    if (!editor) return [];
+    const mapa = new Map();
+    for (const f of editor.filas) {
+      if (!mapa.has(f.posicion)) mapa.set(f.posicion, []);
+      mapa.get(f.posicion).push(f);
+    }
+    return [...mapa.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([pos, filas]) => ({ pos, filas: filas.sort((x, y) => x.rama - y.rama) }));
+  }, [editor]);
+
   // ---- editor de trama ----
   function abrirEditor(lineaParam) {
     const linea = lineaParam || lineaActual;
@@ -336,7 +362,8 @@ export default function App() {
       .sort((a, b) => a.posicion - b.posicion)
       .map(t => ({
         maquina_id: t.maquina_id, nombre_corto: t.nombre_corto,
-        area: t.area, detiene_linea: t.detiene_linea
+        area: t.area, detiene_linea: t.detiene_linea,
+        posicion: t.posicion, rama: t.rama || 1
       }));
     setEditor({ linea: { ...linea, linea_id: lineaId }, filas, nueva: '', error: null, guardando: false });
   }
@@ -348,33 +375,85 @@ export default function App() {
     });
   }
 
-  const mover = (i, dir) => {
-    const j = i + dir;
-    if (!editor || j < 0 || j >= editor.filas.length) return;
-    const movida = editor.filas[i].maquina_id;
-    editar(filas => {
-      const copia = [...filas];
-      [copia[i], copia[j]] = [copia[j], copia[i]];
-      return copia;
-    });
-    // si la fila sube fuera de la vista, dejarla visible
+  // etapas y ramas densas: 1..N, sin huecos
+  function renum(lista) {
+    const posiciones = [...new Set(lista.map(f => f.posicion))].sort((a, b) => a - b);
+    const posMap = new Map(posiciones.map((p, i) => [p, i + 1]));
+    const conPos = lista.map(f => ({ ...f, posicion: posMap.get(f.posicion) }));
+
+    const porEtapa = new Map();
+    for (const f of conPos) {
+      if (!porEtapa.has(f.posicion)) porEtapa.set(f.posicion, []);
+      porEtapa.get(f.posicion).push(f);
+    }
+    const ramaMap = new Map();
+    for (const [, lista2] of porEtapa) {
+      lista2.sort((a, b) => a.rama - b.rama).forEach((f, i) => ramaMap.set(f.maquina_id, i + 1));
+    }
+    return conPos
+      .map(f => ({ ...f, rama: ramaMap.get(f.maquina_id) }))
+      .sort((a, b) => a.posicion - b.posicion || a.rama - b.rama);
+  }
+
+  function enfocar(maquinaId) {
     requestAnimationFrame(() => {
-      document.getElementById('tr-' + movida)?.scrollIntoView({ block: 'nearest' });
+      const el = document.getElementById('tr-' + maquinaId);
+      if (el) {
+        el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        el.classList.add('flash');
+        setTimeout(() => el.classList.remove('flash'), 700);
+      }
     });
+  }
+
+  // mover entre etapas (adelante / atrás en el flujo)
+  const moverEtapa = (maquinaId, dir) => {
+    if (!editor) return;
+    const f = editor.filas.find(x => x.maquina_id === maquinaId);
+    if (!f) return;
+    const max = Math.max(...editor.filas.map(x => x.posicion));
+    const destino = Math.min(Math.max(f.posicion + dir, 1), max + 1);
+    if (destino === f.posicion) return;
+    editar(filas => renum(filas.map(x =>
+      x.maquina_id === maquinaId ? { ...x, posicion: destino, rama: 999 } : x)));
+    enfocar(maquinaId);
   };
 
-  const quitar = (i) => editar(filas => filas.filter((_, k) => k !== i));
+  // mover dentro de la misma etapa: intercambia con la rama vecina
+  const moverRama = (maquinaId, dir) => {
+    if (!editor) return;
+    const f = editor.filas.find(x => x.maquina_id === maquinaId);
+    if (!f) return;
+    const enEtapa = editor.filas
+      .filter(x => x.posicion === f.posicion)
+      .sort((a, b) => a.rama - b.rama);
+    const i = enEtapa.findIndex(x => x.maquina_id === maquinaId);
+    const j = i + dir;
+    if (j < 0 || j >= enEtapa.length) return;
+    const vecina = enEtapa[j];
+    editar(filas => renum(filas.map(x => {
+      if (x.maquina_id === maquinaId) return { ...x, rama: vecina.rama };
+      if (x.maquina_id === vecina.maquina_id) return { ...x, rama: f.rama };
+      return x;
+    })));
+    enfocar(maquinaId);
+  };
 
-  const marcarCuello = (i) => editar(filas => filas.map((f, k) => ({ ...f, detiene_linea: k === i })));
+  const quitar = (maquinaId) => editar(filas => renum(filas.filter(f => f.maquina_id !== maquinaId)));
+
+  const marcarCuello = (maquinaId) =>
+    editar(filas => filas.map(f => ({ ...f, detiene_linea: f.maquina_id === maquinaId })));
 
   function agregarMaquina() {
     const id = Number(editor.nueva);
     if (!id) return;
     const m = maqs.find(x => x.id === id);
     if (!m) return;
-    editar(filas => [...filas, {
-      maquina_id: m.id, nombre_corto: m.nombre_corto, area: m.area, detiene_linea: false
-    }]);
+    const max = editor.filas.length ? Math.max(...editor.filas.map(f => f.posicion)) : 0;
+    editar(filas => renum([...filas, {
+      maquina_id: m.id, nombre_corto: m.nombre_corto, area: m.area,
+      detiene_linea: false, posicion: max + 1, rama: 1
+    }]));
     setEditor(prev => ({ ...prev, nueva: '' }));
   }
 
@@ -382,7 +461,8 @@ export default function App() {
     setEditor(prev => ({ ...prev, guardando: true, error: null }));
     try {
       await api.guardarTrama(editor.linea.linea_id, editor.filas.map(f => ({
-        maquina_id: f.maquina_id, detiene_linea: f.detiene_linea
+        maquina_id: f.maquina_id, detiene_linea: f.detiene_linea,
+        posicion: f.posicion, rama: f.rama
       })));
       const [tab, lin] = await Promise.all([api.tablero(), api.lineas()]);
       setMaqs(tab.maquinas);
@@ -587,11 +667,12 @@ export default function App() {
                     : `${estadoLinea(lineaActual).estado === 'detenida' ? 'Parada total' : 'Parada parcial'} · ${estadoLinea(lineaActual).causa} · desde ${estadoLinea(lineaActual).origen}`}
                 </span>
               </div>
-              <div className="flow">
-                {maquinasLinea.map((m, i) => (
-                  <div className="flow-cell" key={m.id}>
-                    {i > 0 && <span className="arrow">→</span>}
-                    <Tile m={m} conPosicion />
+              <div className="flow split">
+                {columnasLinea.map((col, ci) => (
+                  <div className={`flow-col ${col.filas.length > 1 ? 'multi' : ''}`} key={col.pos}>
+                    <span className="flow-etapa">Etapa {col.pos}</span>
+                    {col.filas.map(m => <Tile key={m.id} m={m} />)}
+                    {ci < columnasLinea.length - 1 && <span className="arrow">→</span>}
                   </div>
                 ))}
               </div>
@@ -720,30 +801,40 @@ export default function App() {
 
           <div className="tf-body">
           <div className="trama-flow">
-            {editor.filas.map((f, i) => (
-              <div className="tf-cell" key={f.maquina_id} id={'tr-' + f.maquina_id}>
-                {i > 0 && <span className="tf-arrow">→</span>}
-                <div className={`tf-card ${f.detiene_linea ? 'is-cuello' : ''}`}>
-                  <div className="tf-head">
-                    <span className="tf-etapa">Etapa {i + 1}</span>
-                    {f.detiene_linea && <span className="tf-tag">cuello</span>}
-                  </div>
+            {columnasEditor.map((col, ci) => (
+              <div className={`tf-col ${col.filas.length > 1 ? 'multi' : ''}`} key={col.pos}>
+                <span className="tf-etapa-h">Etapa {col.pos}</span>
 
-                  <b className="tf-name">{f.nombre_corto}</b>
-                  <span className="tf-area">{f.area}</span>
+                <div className="tf-stack">
+                  {col.filas.map(f => (
+                    <div className={`tf-card ${f.detiene_linea ? 'is-cuello' : ''}`}
+                         key={f.maquina_id} id={'tr-' + f.maquina_id}>
+                      <div className="tf-head">
+                        <span className="tf-etapa">Rama {f.rama}</span>
+                        {f.detiene_linea && <span className="tf-tag">cuello</span>}
+                      </div>
 
-                  <label className="tf-cuello">
-                    <input type="radio" name="cuello" checked={f.detiene_linea}
-                           onChange={() => marcarCuello(i)} />
-                    cuello de línea
-                  </label>
+                      <b className="tf-name">{f.nombre_corto}</b>
+                      <span className="tf-area">{f.area}</span>
 
-                  <div className="tf-actions">
-                    <button onClick={() => mover(i, -1)} disabled={i === 0} title="Mover a la izquierda">←</button>
-                    <button onClick={() => mover(i, 1)} disabled={i === editor.filas.length - 1} title="Mover a la derecha">→</button>
-                    <button className="danger" onClick={() => quitar(i)} disabled={editor.filas.length === 1} title="Quitar">✕</button>
-                  </div>
+                      <label className="tf-cuello">
+                        <input type="radio" name="cuello" checked={f.detiene_linea}
+                               onChange={() => marcarCuello(f.maquina_id)} />
+                        cuello de línea
+                      </label>
+
+                      <div className="tf-actions">
+                        <button onClick={() => moverRama(f.maquina_id, -1)} title="Subir dentro de la etapa">↑</button>
+                        <button onClick={() => moverRama(f.maquina_id, 1)} title="Bajar dentro de la etapa">↓</button>
+                        <button onClick={() => moverEtapa(f.maquina_id, -1)} title="Etapa anterior">←</button>
+                        <button onClick={() => moverEtapa(f.maquina_id, 1)} title="Etapa siguiente">→</button>
+                        <button className="danger" onClick={() => quitar(f.maquina_id)} title="Quitar">✕</button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
+
+                {ci < columnasEditor.length - 1 && <span className="tf-arrow">→</span>}
               </div>
             ))}
 
