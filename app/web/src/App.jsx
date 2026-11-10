@@ -348,13 +348,20 @@ export default function App() {
     });
   }
 
-  const mover = (i, dir) => editar(filas => {
+  const mover = (i, dir) => {
     const j = i + dir;
-    if (j < 0 || j >= filas.length) return filas;
-    const copia = [...filas];
-    [copia[i], copia[j]] = [copia[j], copia[i]];
-    return copia;
-  });
+    if (!editor || j < 0 || j >= editor.filas.length) return;
+    const movida = editor.filas[i].maquina_id;
+    editar(filas => {
+      const copia = [...filas];
+      [copia[i], copia[j]] = [copia[j], copia[i]];
+      return copia;
+    });
+    // si la fila sube fuera de la vista, dejarla visible
+    requestAnimationFrame(() => {
+      document.getElementById('tr-' + movida)?.scrollIntoView({ block: 'nearest' });
+    });
+  };
 
   const quitar = (i) => editar(filas => filas.filter((_, k) => k !== i));
 
@@ -713,7 +720,7 @@ export default function App() {
 
           <div className="trama">
             {editor.filas.map((f, i) => (
-              <div className="trama-row" key={f.maquina_id}>
+              <div className="trama-row" key={f.maquina_id} id={'tr-' + f.maquina_id}>
                 <span className="pos">{i + 1}</span>
                 <b>{f.nombre_corto}</b>
                 <span className="area">{f.area}</span>
