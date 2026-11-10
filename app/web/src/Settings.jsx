@@ -8,7 +8,7 @@ const vacio = {
   receta: {
     codigo: '', nombre: '', especie_id: '', producto_id: '', linea_id: '',
     toneladas_turno: '', rendimiento_pct: '', vigente_desde: '', vigente_hasta: '',
-    activa: true, notas: '', distribucion: []
+    activa: true, notas: '', etapas: []
   }
 };
 
@@ -59,9 +59,10 @@ export default function Settings({ onClose, onTrama, onSaved }) {
             : [],
           vigente_desde: item.vigente_desde ? String(item.vigente_desde).slice(0, 10) : '',
           vigente_hasta: item.vigente_hasta ? String(item.vigente_hasta).slice(0, 10) : '',
-          distribucion: (data.distribucion || [])
-            .filter(d => d.receta_id === item.id)
-            .map(d => ({ maquina_id: d.maquina_id, porcentaje: Number(d.porcentaje) }))
+          etapas: (data.etapas || [])
+            .filter(e => e.receta_id === item.id)
+            .map(e => ({ key: 'e' + e.id, tipo: e.tipo, maquina_id: e.maquina_id,
+                         linea_id: e.linea_id, paralelo: e.paralelo }))
         }
       : JSON.parse(JSON.stringify(vacio[tipo]));
     setForm({ tipo, item: item || null, valores: base, error: null });
@@ -81,6 +82,13 @@ export default function Settings({ onClose, onTrama, onSaved }) {
         r = item ? await api.editarMaquina(item.id, valores) : await api.crearMaquina(valores);
       } else {
         r = item ? await api.editarReceta(item.id, valores) : await api.crearReceta(valores);
+        const recetaId = item ? item.id : r.id;
+        await api.guardarEtapas(recetaId, (valores.etapas || []).map((e, i) => ({
+          orden: i + 1, tipo: e.tipo,
+          maquina_id: e.tipo === 'maquina' ? e.maquina_id : null,
+          linea_id: e.tipo === 'linea' ? e.linea_id : null,
+          paralelo: !!e.paralelo
+        })));
       }
       setForm(null);
       await cargar();
@@ -197,6 +205,26 @@ export default function Settings({ onClose, onTrama, onSaved }) {
     } catch (e) {
       setError(e.message);
     }
+  }
+
+  function agregarEtapa() {
+    set('etapas', [...(form.valores.etapas || []), { key: 'n' + Date.now(), tipo: 'linea', linea_id: null, maquina_id: null, paralelo: false }]);
+  }
+  function setEtapa(i, campo, valor) {
+    const lista = [...(form.valores.etapas || [])];
+    lista[i] = { ...lista[i], [campo]: valor };
+    if (campo === 'tipo') { lista[i].linea_id = null; lista[i].maquina_id = null; }
+    set('etapas', lista);
+  }
+  function moverEtapa(i, dir) {
+    const lista = [...(form.valores.etapas || [])];
+    const j = i + dir;
+    if (j < 0 || j >= lista.length) return;
+    [lista[i], lista[j]] = [lista[j], lista[i]];
+    set('etapas', lista);
+  }
+  function quitarEtapa(i) {
+    set('etapas', (form.valores.etapas || []).filter((_, k) => k !== i));
   }
 
   function toggleCausa(id) {
@@ -589,11 +617,13 @@ export default function Settings({ onClose, onTrama, onSaved }) {
                     </div>
                   </label>
 
-                  <label>Línea<select value={form.valores.linea_id || ''}
-                    onChange={e => set('linea_id', e.target.value ? Number(e.target.value) : null)}>
-                    <option value="">—</option>
-                    {data.lineas.map(l => <option key={l.id} value={l.id}>{l.codigo} · {l.nombre}</option>)}
-                  </select></label>
+                  <label>Línea principal <span className="opt">opcional · el proceso se arma abajo</span>
+                    <select value={form.valores.linea_id || ''}
+                      onChange={e => set('linea_id', e.target.value ? Number(e.target.value) : null)}>
+                      <option value="">—</option>
+                      {data.lineas.map(l => <option key={l.id} value={l.id}>{l.codigo} · {l.nombre}</option>)}
+                    </select>
+                  </label>
                   <label>Toneladas / turno<input type="number" step="0.1" value={form.valores.toneladas_turno || ''}
                     onChange={e => set('toneladas_turno', e.target.value)} /></label>
                   <label>Rendimiento %<input type="number" step="0.1" value={form.valores.rendimiento_pct || ''}
@@ -607,31 +637,53 @@ export default function Settings({ onClose, onTrama, onSaved }) {
                   <label className="wide">Notas<input value={form.valores.notas || ''}
                     onChange={e => set('notas', e.target.value)} /></label>
 
-                  <div className="wide dist">
-                    <div className="dist-h">Distribución por máquina</div>
-                    {!form.valores.linea_id && <p className="set-hint">Elige una línea para ver sus máquinas.</p>}
-                    {form.valores.linea_id && maquinasDeLinea.length === 0 && (
-                      <p className="set-hint">Esa línea todavía no tiene trama.</p>
+                  <div className="wide etapas">
+                    <div className="etapas-h">
+                      Etapas del proceso
+                      <em>en orden · una línea completa o una máquina suelta · «en paralelo» para etapas simultáneas</em>
+                    </div>
+
+                    {(form.valores.etapas || []).length === 0 && (
+                      <p className="set-hint">Agregá la primera etapa: una línea entera o una máquina.</p>
                     )}
-                    {maquinasDeLinea.map(m => {
-                      const actual = (form.valores.distribucion || []).find(d => d.maquina_id === m.maquina_id);
-                      return (
-                        <div className="dist-row" key={m.maquina_id}>
-                          <label className="check">
-                            <input type="checkbox" checked={!!actual}
-                              onChange={e => toggleMaquinaReceta(m.maquina_id, e.target.checked)} />
-                            <span className="pos">{m.posicion}</span>
-                            {m.maquina?.nombre_corto}
+
+                    {(form.valores.etapas || []).map((e, i) => (
+                      <div className="etapa-row" key={e.key || i}>
+                        <span className="pos">{i + 1}</span>
+
+                        <select className="tipo" value={e.tipo}
+                                onChange={ev => setEtapa(i, 'tipo', ev.target.value)}>
+                          <option value="linea">Línea</option>
+                          <option value="maquina">Máquina</option>
+                        </select>
+
+                        <select className="destino"
+                                value={e.tipo === 'linea' ? (e.linea_id || '') : (e.maquina_id || '')}
+                                onChange={ev => setEtapa(i, e.tipo === 'linea' ? 'linea_id' : 'maquina_id',
+                                                          ev.target.value ? Number(ev.target.value) : null)}>
+                          <option value="">Elegir…</option>
+                          {e.tipo === 'linea'
+                            ? data.lineas.map(l => <option key={l.id} value={l.id}>{l.codigo} · {l.nombre}</option>)
+                            : data.maquinas.map(m => <option key={m.id} value={m.id}>{m.nombre_corto} · {m.nombre}</option>)}
+                        </select>
+
+                        {i > 0 && (
+                          <label className="paralelo">
+                            <input type="checkbox" checked={!!e.paralelo}
+                                   onChange={ev => setEtapa(i, 'paralelo', ev.target.checked)} />
+                            en paralelo
                           </label>
-                          <div className="pct">
-                            <input type="number" min="1" max="100" value={actual ? actual.porcentaje : ''}
-                              disabled={!actual}
-                              onChange={e => setPorcentaje(m.maquina_id, e.target.value)} />
-                            <span>%</span>
-                          </div>
+                        )}
+
+                        <div className="acciones">
+                          <button onClick={() => moverEtapa(i, -1)} disabled={i === 0}>↑</button>
+                          <button onClick={() => moverEtapa(i, 1)} disabled={i === form.valores.etapas.length - 1}>↓</button>
+                          <button onClick={() => quitarEtapa(i)}>✕</button>
                         </div>
-                      );
-                    })}
+                      </div>
+                    ))}
+
+                    <button className="wz-add" onClick={agregarEtapa}>＋ Agregar etapa</button>
                   </div>
                 </>
               )}

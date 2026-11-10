@@ -588,3 +588,37 @@ header{
   margin:0 0 12px;background:var(--panel2);border:1px solid var(--line);border-radius:12px;
   padding:14px 16px;font:13px/1.7 ui-monospace,monospace;color:var(--muted);white-space:pre-wrap;
 }
+
+/* ---------------- etapas del proceso (receta) ---------------- */
+.etapas{margin-top:6px;border-top:1px solid var(--line);padding-top:16px;display:flex;flex-direction:column;gap:10px}
+.etapas-h{display:flex;flex-direction:column;gap:3px;font-size:14.5px;font-weight:650;color:var(--ink)}
+.etapas-h em{font-style:normal;font-weight:500;font-size:12.5px;color:var(--dim)}
+.etapa-row{display:flex;align-items:center;gap:10px;background:var(--panel2);border:1px solid var(--line);
+           border-radius:12px;padding:10px 12px}
+.etapa-row .pos{width:24px;text-align:center;font:700 14px ui-monospace,monospace;color:var(--dim)}
+.etapa-row select{height:46px;border-radius:10px;border:1px solid var(--line);background:#fff;
+                  font:14.5px inherit;padding:0 10px;color:var(--ink)}
+.etapa-row select.tipo{width:112px;flex:0 0 auto}
+.etapa-row select.destino{flex:1;min-width:0}
+.paralelo{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--muted);white-space:nowrap}
+.paralelo input{width:18px;height:18px;accent-color:var(--accent)}
+
+/* ---------------- organigrama del proceso (tablero) ---------------- */
+.proc-flow{display:flex;align-items:flex-start;gap:0;overflow-x:auto;padding:8px 4px 16px}
+.proc-step{display:flex;align-items:center;gap:0;flex:0 0 auto}
+.proc-num{
+  width:30px;height:30px;border-radius:50%;background:var(--accent-bg);color:var(--accent);
+  font:700 13px ui-monospace,monospace;display:grid;place-items:center;margin-right:8px;flex:0 0 auto;
+}
+.proc-cards{display:flex;gap:12px;align-items:stretch}
+.proc-card{
+  background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:10px;
+  display:flex;flex-direction:column;gap:8px;box-shadow:var(--shadow);min-width:230px;max-width:340px;
+}
+.proc-h{display:flex;flex-direction:column;gap:2px;padding:2px 4px}
+.proc-h b{font-size:14.5px}
+.proc-h span{font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:var(--dim)}
+.proc-maquinas{display:flex;flex-direction:column;gap:6px}
+.proc-maquinas .tile{min-height:78px;height:auto;padding:10px 12px}
+.proc-maquinas .tile .name{font-size:15px}
+.proc-arrow{color:#9FB2C4;font-size:20px;margin:0 10px;flex:0 0 auto}

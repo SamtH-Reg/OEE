@@ -130,6 +130,20 @@ completo. Si no se marca ninguna, se comporta como antes: muestra todo el catál
 
 El botón **«＋ Nueva»** de cada categoría crea una falla nueva en el catálogo y la deja asignada.
 
+### Procesos: la receta como organigrama
+
+Una receta ya no es «una línea con una distribución»: es un **proceso** formado por **etapas**.
+Cada etapa es una **línea completa** o una **máquina suelta**, y se ejecutan en el orden definido.
+Si dos etapas corren a la vez (dos líneas alimentando una máquina, por ejemplo), se marca
+**«en paralelo»** y comparten el mismo paso del organigrama.
+
+- Tabla `receta_etapas` (`tipo = 'linea' | 'maquina'`, `orden`, `paralelo`).
+- En el formulario de la receta se arma la secuencia con **＋ Agregar etapa**, y se reordena con ↑ ↓.
+- El operador elige el **proceso** en el panel lateral y ve el organigrama completo: cada etapa con
+  sus máquinas ya expandidas (una línea trae su trama). Toca una tarjeta y registra la parada igual
+  que siempre, con los 2 toques.
+- `GET /api/recetas/:id/proceso` devuelve las etapas ya resueltas con sus máquinas.
+
 ### Modelo de recetas
 
 - `especies` y `productos` (con su especie) son catálogos simples.

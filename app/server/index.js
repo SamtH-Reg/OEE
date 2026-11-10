@@ -53,7 +53,8 @@ app.get('/api/catalogo', async () => {
          from codigos_causa where activo order by categoria_id, descripcion`),
     q(`select t.id, t.fecha, t.nombre, t.supervisor
          from turnos t where t.id = fn_turno_para(now())`),
-    q('select maquina_id, codigo_causa_id from maquina_causas')
+    q('select maquina_id, codigo_causa_id from maquina_causas'),
+    q('select * from v_receta_etapas')
   ]);
   return {
     areas: areas.rows,
@@ -277,7 +278,7 @@ app.get('/api/historial', async (req) => {
 // ---------------- administración (ajustes) ----------------
 app.get('/api/settings', async () => {
   const [areas, maquinas, lineas, trama, especies, productos, recetas, distribucion,
-         causas, categorias, maquinaCausas] = await Promise.all([
+         causas, categorias, maquinaCausas, etapas] = await Promise.all([
     q('select id, codigo, nombre, orden, activa from areas order by orden, nombre'),
     q(`select m.id, m.area_id, m.codigo, m.nombre, m.nombre_corto, m.criticidad, m.activa,
               (select count(*) from registro_paradas p where p.maquina_id = m.id)::int as paradas
@@ -290,13 +291,15 @@ app.get('/api/settings', async () => {
     q('select receta_id, maquina_id, porcentaje from receta_maquinas'),
     q('select id, codigo, categoria_id, descripcion, es_planificada, activo from codigos_causa order by categoria_id, descripcion'),
     q('select id, codigo, nombre, icono, orden from categorias_falla where activa order by orden'),
-    q('select maquina_id, codigo_causa_id from maquina_causas')
+    q('select maquina_id, codigo_causa_id from maquina_causas'),
+    q('select * from v_receta_etapas')
   ]);
   return {
     areas: areas.rows, maquinas: maquinas.rows, lineas: lineas.rows, trama: trama.rows,
     especies: especies.rows, productos: productos.rows,
     recetas: recetas.rows, distribucion: distribucion.rows,
-    causas: causas.rows, categorias: categorias.rows, maquina_causas: maquinaCausas.rows
+    causas: causas.rows, categorias: categorias.rows, maquina_causas: maquinaCausas.rows,
+    etapas: etapas.rows
   };
 });
 
@@ -753,6 +756,73 @@ app.put('/api/recetas/:id', async (req, reply) => {
   } catch (e) {
     return reply.code(400).send({ error: e.message });
   }
+});
+
+// ---------------- etapas del proceso ----------------
+app.put('/api/recetas/:id/etapas', async (req, reply) => {
+  const id = Number(req.params.id);
+  const etapas = (req.body && req.body.etapas) || [];
+  const client = await pool.connect();
+  try {
+    await client.query('begin');
+    await client.query('delete from receta_etapas where receta_id = $1', [id]);
+    let n = 0;
+    for (const e of etapas) {
+      const tipo = e.tipo === 'linea' ? 'linea' : 'maquina';
+      if (tipo === 'linea' && !e.linea_id) continue;
+      if (tipo === 'maquina' && !e.maquina_id) continue;
+      n += 1;
+      await client.query(
+        `insert into receta_etapas (receta_id, orden, tipo, maquina_id, linea_id, etiqueta, paralelo)
+         values ($1, $2, $3, $4, $5, $6, $7)`,
+        [id, e.orden ?? n, tipo,
+         tipo === 'maquina' ? e.maquina_id : null,
+         tipo === 'linea' ? e.linea_id : null,
+         texto(e.etiqueta, 60) || null, Boolean(e.paralelo)]);
+    }
+    await client.query('commit');
+    return { ok: true, etapas: n };
+  } catch (err) {
+    await client.query('rollback');
+    return reply.code(400).send({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Proceso resuelto: cada etapa con sus máquinas (una línea se expande a su trama).
+app.get('/api/recetas/:id/proceso', async (req, reply) => {
+  const id = Number(req.params.id);
+  const rec = await q('select * from v_recetas where id = $1', [id]);
+  if (!rec.rowCount) return reply.code(404).send({ error: 'receta no existe' });
+
+  const [etapas, maquinas, trama] = await Promise.all([
+    q('select * from v_receta_etapas where receta_id = $1 order by orden, id', [id]),
+    q(`select m.id, m.codigo, m.nombre_corto, m.criticidad, m.area_id, a.nombre as area
+         from maquinas m join areas a on a.id = m.area_id where m.activa`),
+    q(`select lm.linea_id, lm.maquina_id, lm.posicion, lm.detiene_linea
+         from linea_maquinas lm order by lm.linea_id, lm.posicion`)
+  ]);
+
+  const porId = new Map(maquinas.rows.map(m => [m.id, m]));
+  const etapasResueltas = etapas.rows.map(e => {
+    const lista = e.tipo === 'linea'
+      ? trama.rows.filter(t => t.linea_id === e.linea_id)
+          .map(t => ({ ...porId.get(t.maquina_id), detiene_linea: t.detiene_linea, posicion: t.posicion }))
+          .filter(m => m.id)
+      : [porId.get(e.maquina_id)].filter(Boolean);
+    return { ...e, maquinas: lista };
+  });
+
+  return { receta: rec.rows[0], etapas: etapasResueltas };
+});
+
+// Lista de procesos para el operador
+app.get('/api/procesos', async () => {
+  const r = await q(`select id, codigo, nombre, especie, producto, linea_codigo,
+                            (select count(*) from receta_etapas e where e.receta_id = v.id)::int as etapas
+                       from v_recetas v where activa order by nombre`);
+  return { procesos: r.rows };
 });
 
 // ---------------- datos de demostración ----------------

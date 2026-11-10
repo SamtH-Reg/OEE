@@ -29,6 +29,8 @@ export default function App() {
   const [maqs, setMaqs] = useState([]);
   const [lineas, setLineas] = useState([]);
   const [trama, setTrama] = useState([]);
+  const [procesos, setProcesos] = useState([]);
+  const [proceso, setProceso] = useState(null);
   const [sel, setSel] = useState('todas');
 
   const [locales, setLocales] = useState({});   // maquina_id -> parada local
@@ -58,12 +60,15 @@ export default function App() {
       if (c && vivo) setCat(c);
 
       try {
-        const [catFresca, tab, lin] = await Promise.all([api.catalogo(), api.tablero(), api.lineas()]);
+        const [catFresca, tab, lin, proc] = await Promise.all([
+          api.catalogo(), api.tablero(), api.lineas(), api.procesos()
+        ]);
         if (!vivo) return;
         setCat(catFresca);
         setMaqs(tab.maquinas);
         setLineas(lin.lineas);
         setTrama(lin.trama);
+        setProcesos(proc.procesos || []);
         setSinRed(false);
         setError(null);
         await guardarCatalogo(catFresca);
@@ -114,6 +119,14 @@ export default function App() {
       await guardarTablero({ maquinas: tab.maquinas, lineas: lin.lineas, trama: lin.trama });
     } catch { /* sin red: se mantiene lo que hay */ }
   }
+
+  useEffect(() => {
+    const id = typeof sel === 'string' && sel.startsWith('p:') ? Number(sel.slice(2)) : null;
+    if (!id) { setProceso(null); return; }
+    let vivo = true;
+    api.proceso(id).then(p => { if (vivo) setProceso(p); }).catch(() => {});
+    return () => { vivo = false; };
+  }, [sel]);
 
   // ---- estado efectivo de cada máquina ----
   function estadoDe(m) {
@@ -200,7 +213,21 @@ export default function App() {
       .filter(a => a.maquinas.length > 0);
   }, [cat, maqs]);
 
-  const lineaActual = sel === 'todas' ? null : lineas.find(l => l.linea_id === sel);
+  const lineaActual = (sel === 'todas' || String(sel).startsWith('p:'))
+    ? null
+    : lineas.find(l => l.linea_id === sel);
+
+  // etapas agrupadas: las «en paralelo» comparten el paso
+  const etapasAgrupadas = useMemo(() => {
+    if (!proceso) return [];
+    const grupos = [];
+    for (const e of proceso.etapas) {
+      const ultimo = grupos[grupos.length - 1];
+      if (e.paralelo && ultimo) ultimo.etapas.push(e);
+      else grupos.push({ orden: e.orden, etapas: [e] });
+    }
+    return grupos;
+  }, [proceso]);
 
   const maquinasLinea = useMemo(() => {
     if (!lineaActual) return [];
@@ -461,6 +488,30 @@ export default function App() {
             );
           })}
 
+          {procesos.length > 0 && (
+            <>
+              <div className="side-h">Procesos</div>
+              {procesos.map(p => (
+                <button key={p.id} className={`line-item ${sel === 'p:' + p.id ? 'on' : ''}`}
+                        onClick={() => setSel('p:' + p.id)}>
+                  <span className="line-badge">
+                    <svg viewBox="0 0 24 24">
+                      <rect x="2.5" y="4" width="6" height="5" rx="1.4" />
+                      <rect x="15.5" y="4" width="6" height="5" rx="1.4" />
+                      <rect x="9" y="15" width="6" height="5" rx="1.4" />
+                      <path d="M8.5 6.5h7M12 9v6" />
+                    </svg>
+                  </span>
+                  <span className="lname">
+                    <b>{p.nombre}</b>
+                    <small>{[p.especie, p.producto].filter(Boolean).join(' · ') || 'proceso'} · {p.etapas} etapas</small>
+                  </span>
+                  <span className="pill">{p.etapas}</span>
+                </button>
+              ))}
+            </>
+          )}
+
           {lineaActual && (
             <button className="btn-edit" onClick={abrirEditor}>
               <svg viewBox="0 0 24 24">
@@ -480,7 +531,46 @@ export default function App() {
         <main className="stage">
           {!cat && <div className="aviso">Cargando catálogo de planta…</div>}
 
-          {lineaActual ? (
+          {proceso ? (
+            <>
+              <div className="line-head">
+                <b>{proceso.receta.nombre}</b>
+                <span>
+                  {[proceso.receta.especie, proceso.receta.producto].filter(Boolean).join(' · ')}
+                  {' · '}{proceso.etapas.length} etapas
+                  {proceso.receta.toneladas_turno ? ` · ${Number(proceso.receta.toneladas_turno)} t/turno` : ''}
+                </span>
+              </div>
+              <div className="proc-flow">
+                {etapasAgrupadas.map((g, gi) => (
+                  <div className="proc-step" key={g.orden}>
+                    <div className="proc-num">{g.orden}</div>
+                    <div className="proc-cards">
+                      {g.etapas.map(e => (
+                        <div className="proc-card" key={e.id}>
+                          <div className="proc-h">
+                            <b>{e.nombre}</b>
+                            <span>{e.tipo === 'linea' ? 'línea completa' : 'máquina'}</span>
+                          </div>
+                          <div className="proc-maquinas">
+                            {e.maquinas.map(mm => {
+                              const m = maqs.find(x => x.id === mm.id);
+                              return m ? <Tile key={m.id} m={m} /> : null;
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {gi < etapasAgrupadas.length - 1 && <span className="proc-arrow">→</span>}
+                  </div>
+                ))}
+              </div>
+              <p className="flow-hint">
+                Proceso seleccionado: tocá cualquier máquina para registrar la parada. Los equipos vienen
+                de las líneas y máquinas que armaste en la receta.
+              </p>
+            </>
+          ) : lineaActual ? (
             <>
               <div className={`line-head ${estadoLinea(lineaActual).estado}`}>
                 <b>{lineaActual.nombre}</b>

@@ -34,6 +34,9 @@ export const api = {
   copiarMaquina: (id, b) => req(`/api/maquinas/${id}/copiar`, { method: 'POST', body: JSON.stringify(b) }),
   crearReceta: (b) => req('/api/recetas', { method: 'POST', body: JSON.stringify(b) }),
   editarReceta: (id, b) => req(`/api/recetas/${id}`, { method: 'PUT', body: JSON.stringify(b) }),
+  guardarEtapas: (id, etapas) => req(`/api/recetas/${id}/etapas`, { method: 'PUT', body: JSON.stringify({ etapas }) }),
+  proceso: (id) => req(`/api/recetas/${id}/proceso`),
+  procesos: () => req('/api/procesos'),
   demo: () => req('/api/demo'),
   eliminarDemo: () => req('/api/demo/eliminar', { method: 'POST', body: JSON.stringify({ confirmar: true }) }),
   historial: (q = '') => req('/api/historial' + q)
