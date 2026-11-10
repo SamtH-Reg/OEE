@@ -482,6 +482,13 @@ export default function App() {
                 si no, se detiene lo que viene aguas abajo.
               </p>
             </>
+          ) : maqs.length === 0 ? (
+            <div className="empty">
+              <div className="empty-mark">◫</div>
+              <h2>La planta está vacía</h2>
+              <p>Armá la primera línea con sus equipos y su receta. Toma tres pasos y queda lista para operar.</p>
+              <button className="btn-go small" onClick={() => setAjustes(true)}>＋ Armar línea</button>
+            </div>
           ) : (
             <div className="board">
               {areas.map(a => (

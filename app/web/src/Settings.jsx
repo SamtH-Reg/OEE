@@ -20,10 +20,14 @@ export default function Settings({ onClose, onTrama, onSaved }) {
   const [guardando, setGuardando] = useState(false);
   const [nuevo, setNuevo] = useState(null);    // {tipo:'especie'|'producto', codigo, nombre}
   const [wizard, setWizard] = useState(false);
+  const [demo, setDemo] = useState(null);
+  const [confirmando, setConfirmando] = useState(false);
+  const [borrando, setBorrando] = useState(false);
 
   async function cargar() {
     try {
       setData(await api.settings());
+      setDemo(await api.demo());
       setError(null);
     } catch (e) {
       setError('No se pudieron cargar los ajustes: ' + e.message);
@@ -77,6 +81,20 @@ export default function Settings({ onClose, onTrama, onSaved }) {
       setForm(prev => ({ ...prev, error: e.message }));
     } finally {
       setGuardando(false);
+    }
+  }
+
+  async function borrarDemo() {
+    setBorrando(true);
+    try {
+      await api.eliminarDemo();
+      setConfirmando(false);
+      await cargar();
+      onSaved && onSaved();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBorrando(false);
     }
   }
 
@@ -148,6 +166,7 @@ export default function Settings({ onClose, onTrama, onSaved }) {
           <button className={tab === 'lineas' ? 'on' : ''} onClick={() => setTab('lineas')}>Líneas</button>
           <button className={tab === 'equipos' ? 'on' : ''} onClick={() => setTab('equipos')}>Equipos</button>
           <button className={tab === 'recetas' ? 'on' : ''} onClick={() => setTab('recetas')}>Recetas</button>
+          <button className={tab === 'datos' ? 'on' : ''} onClick={() => setTab('datos')}>Datos</button>
         </div>
         <button className="x" onClick={onClose}>✕</button>
       </div>
@@ -245,6 +264,46 @@ export default function Settings({ onClose, onTrama, onSaved }) {
               flujo entre las máquinas de esa línea.
             </p>
           </>
+        )}
+
+        {/* -------- datos de demostración -------- */}
+        {tab === 'datos' && demo && (
+          <div className="demo-card">
+            <h3>Datos de demostración</h3>
+            <p>
+              Son los datos de ejemplo cargados para probar el tablero:
+              <b> {demo.maquinas} equipos</b>, <b>{demo.lineas} líneas</b>,
+              <b> {demo.recetas} recetas</b> y <b>{demo.paradas} paradas</b>.
+            </p>
+            <p className="set-hint">
+              Se conservan las áreas, las especies y los productos, y todo lo que hayas creado vos.
+              No se puede deshacer.
+            </p>
+
+            {!confirmando ? (
+              <button className="btn-danger"
+                      disabled={demo.maquinas + demo.lineas + demo.recetas + demo.paradas === 0}
+                      onClick={() => setConfirmando(true)}>
+                {demo.maquinas + demo.lineas + demo.recetas + demo.paradas === 0
+                  ? 'No quedan datos de demostración'
+                  : 'Eliminar datos de demostración'}
+              </button>
+            ) : (
+              <div className="confirm">
+                <b>
+                  ¿Eliminar {demo.maquinas} equipos, {demo.lineas} líneas, {demo.recetas} recetas
+                  y {demo.paradas} paradas?
+                </b>
+                <span>La planta queda vacía para que cargues tus líneas reales.</span>
+                <div className="confirm-actions">
+                  <button className="ghost" onClick={() => setConfirmando(false)}>Cancelar</button>
+                  <button className="btn-danger" onClick={borrarDemo} disabled={borrando}>
+                    {borrando ? 'Eliminando…' : 'Sí, eliminar'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         )}
       </div>
 

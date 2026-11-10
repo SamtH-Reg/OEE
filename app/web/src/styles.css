@@ -507,3 +507,37 @@ header{
 
 .lbl{display:block}
 .lbl em{font-style:normal;font-weight:500;color:var(--dim);font-size:12.5px;margin-left:6px}
+
+/* ---------------- datos de demostracion ---------------- */
+.demo-card{
+  max-width:720px;background:var(--panel);border:1px solid var(--line);border-radius:16px;
+  padding:20px;display:flex;flex-direction:column;gap:11px;box-shadow:var(--shadow);
+}
+.demo-card h3{margin:0;font-size:20px}
+.demo-card p{margin:0;color:var(--muted);font-size:15px;line-height:1.6}
+.demo-card p b{color:var(--ink)}
+.btn-danger{
+  align-self:flex-start;height:58px;padding:0 26px;border-radius:14px;border:1px solid #E7B7B1;
+  background:var(--stop-bg);color:var(--stop);font:650 16px inherit;cursor:pointer;
+}
+.btn-danger:hover{background:#FADDD9}
+.btn-danger:disabled{opacity:.45;cursor:default}
+.confirm{
+  background:var(--stop-bg);border:1px solid #EFC4BF;border-radius:14px;padding:14px 16px;
+  display:flex;flex-direction:column;gap:6px;
+}
+.confirm b{font-size:16.5px;color:#8E241B}
+.confirm span{font-size:14px;color:#A6463C}
+.confirm-actions{display:flex;gap:10px;margin-top:6px}
+
+/* ---------------- planta vacia ---------------- */
+.empty{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+  height:100%;min-height:420px;text-align:center;padding:40px;
+}
+.empty-mark{
+  width:88px;height:88px;border-radius:24px;display:grid;place-items:center;
+  background:#E7EEF6;color:#9FB2C4;font-size:40px;
+}
+.empty h2{margin:0;font-size:26px;letter-spacing:-.3px}
+.empty p{margin:0;max-width:46ch;color:var(--muted);font-size:15.5px;line-height:1.6}

@@ -485,6 +485,24 @@ app.put('/api/recetas/:id', async (req, reply) => {
   }
 });
 
+// ---------------- datos de demostración ----------------
+app.get('/api/demo', async () => {
+  const r = await q('select * from v_demo_resumen');
+  return r.rows[0] || { maquinas: 0, lineas: 0, recetas: 0, paradas: 0 };
+});
+
+app.post('/api/demo/eliminar', async (req, reply) => {
+  if ((req.body || {}).confirmar !== true) {
+    return reply.code(400).send({ error: 'falta confirmar' });
+  }
+  try {
+    const r = await q('select * from fn_eliminar_demo()');
+    return { ok: true, borrado: r.rows[0] };
+  } catch (e) {
+    return reply.code(400).send({ error: e.message });
+  }
+});
+
 // ---------------- PWA ----------------
 app.register(fastifyStatic, {
   root: path.join(__dirname, '..', 'web', 'dist'),
