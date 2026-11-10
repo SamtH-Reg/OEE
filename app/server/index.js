@@ -665,12 +665,13 @@ app.post('/api/causas', async (req, reply) => {
 
 app.post('/api/especies', async (req, reply) => {
   const b = req.body || {};
-  if (!codigo(b.codigo) || !texto(b.nombre)) {
-    return reply.code(400).send({ error: 'código y nombre son obligatorios' });
+  if (!texto(b.nombre)) {
+    return reply.code(400).send({ error: 'el nombre es obligatorio' });
   }
   try {
+    const code = codigo(b.codigo) || await codigoUnico('especies', slug(b.nombre));
     const r = await q('insert into especies (codigo, nombre) values ($1, $2) returning *',
-      [codigo(b.codigo), texto(b.nombre)]);
+      [code, texto(b.nombre)]);
     return r.rows[0];
   } catch (e) {
     return reply.code(400).send({ error: e.code === '23505' ? 'esa especie ya existe' : e.message });
@@ -679,12 +680,13 @@ app.post('/api/especies', async (req, reply) => {
 
 app.post('/api/productos', async (req, reply) => {
   const b = req.body || {};
-  if (!codigo(b.codigo) || !texto(b.nombre)) {
-    return reply.code(400).send({ error: 'código y nombre son obligatorios' });
+  if (!texto(b.nombre)) {
+    return reply.code(400).send({ error: 'el nombre es obligatorio' });
   }
   try {
+    const code = codigo(b.codigo) || await codigoUnico('productos', slug(b.nombre));
     const r = await q('insert into productos (codigo, nombre, especie_id) values ($1, $2, $3) returning *',
-      [codigo(b.codigo), texto(b.nombre), b.especie_id ?? null]);
+      [code, texto(b.nombre), b.especie_id ?? null]);
     return r.rows[0];
   } catch (e) {
     return reply.code(400).send({ error: e.code === '23505' ? 'ese producto ya existe' : e.message });

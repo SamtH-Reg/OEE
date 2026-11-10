@@ -405,7 +405,7 @@ export default function App() {
         : `■ ${est.p.causa} · ${minutos(est.p.hora_inicio, ahora)}`;
     return (
       <button className={`tile ${est.tipo}`} onClick={() => tocar(m, est)}>
-        <span className="code">{conPosicion && m.posicion ? `${m.posicion} · ` : ''}{m.codigo}</span>
+        {conPosicion && m.posicion && <span className="code">Etapa {m.posicion}</span>}
         <span className="name">{m.nombre_corto}</span>
         <span className="state">{est.tipo === 'plan' ? `◷ ${est.p.causa}` : texto}</span>
         {est.tipo === 'stop' && <span className="pulse" />}

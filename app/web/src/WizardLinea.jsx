@@ -9,7 +9,7 @@ const nuevaFila = () => ({ key: seq++, maquina_id: null, nombre: '', area_id: ''
 
 export default function WizardLinea({ data, onClose, onSaved }) {
   const [paso, setPaso] = useState(1);
-  const [linea, setLinea] = useState({ nombre: '', descripcion: '', codigo: '' });
+  const [linea, setLinea] = useState({ nombre: '', descripcion: '' });
   const [filas, setFilas] = useState([{ ...nuevaFila(), detiene_linea: true }]);
   const [conReceta, setConReceta] = useState(true);
   const [receta, setReceta] = useState({
@@ -55,8 +55,8 @@ export default function WizardLinea({ data, onClose, onSaved }) {
     if (!nuevo || !nuevo.codigo.trim() || !nuevo.nombre.trim()) return;
     try {
       const creado = nuevo.tipo === 'especie'
-        ? await api.crearEspecie({ codigo: nuevo.codigo, nombre: nuevo.nombre })
-        : await api.crearProducto({ codigo: nuevo.codigo, nombre: nuevo.nombre });
+        ? await api.crearEspecie({ nombre: nuevo.nombre })
+        : await api.crearProducto({ nombre: nuevo.nombre });
       const fresca = await api.settings();
       data.especies = fresca.especies;
       data.productos = fresca.productos;
@@ -85,7 +85,7 @@ export default function WizardLinea({ data, onClose, onSaved }) {
     setGuardando(true);
     try {
       // 1. línea
-      const l = await api.crearLinea({ nombre: linea.nombre, descripcion: linea.descripcion, codigo: linea.codigo });
+      const l = await api.crearLinea({ nombre: linea.nombre, descripcion: linea.descripcion });
 
       // 2. equipos: los nuevos se crean primero
       const resueltas = [];
@@ -168,11 +168,6 @@ export default function WizardLinea({ data, onClose, onSaved }) {
               <span className="lbl">Descripción <em>opcional</em></span>
               <input value={linea.descripcion} onChange={e => setLinea({ ...linea, descripcion: e.target.value })}
                      placeholder="Recepción → cocido → empaque" />
-            </label>
-            <label className="wz-field">
-              <span className="lbl">Código <em>opcional · se genera solo</em></span>
-              <input value={linea.codigo} onChange={e => setLinea({ ...linea, codigo: e.target.value })}
-                     placeholder="automático" />
             </label>
           </div>
         )}
@@ -320,10 +315,11 @@ export default function WizardLinea({ data, onClose, onSaved }) {
               <button className="x" onClick={() => setNuevo(null)}>✕</button>
             </div>
             <div className="form-grid">
-              <label>Código<input autoFocus value={nuevo.codigo}
-                onChange={e => setNuevo({ ...nuevo, codigo: e.target.value })} placeholder="JIB" /></label>
-              <label>Nombre<input value={nuevo.nombre}
-                onChange={e => setNuevo({ ...nuevo, nombre: e.target.value })} placeholder="Jibia" /></label>
+              <label className="wide">Nombre
+                <input autoFocus value={nuevo.nombre}
+                       onChange={e => setNuevo({ ...nuevo, nombre: e.target.value })}
+                       placeholder="Reineta" />
+              </label>
             </div>
             <div className="form-foot">
               <button className="ghost" onClick={() => setNuevo(null)}>Cancelar</button>

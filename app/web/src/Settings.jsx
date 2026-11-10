@@ -268,8 +268,8 @@ export default function Settings({ onClose, onTrama, onSaved }) {
     if (!nuevo || !nuevo.codigo || !nuevo.nombre) return;
     try {
       const creado = nuevo.tipo === 'especie'
-        ? await api.crearEspecie({ codigo: nuevo.codigo, nombre: nuevo.nombre })
-        : await api.crearProducto({ codigo: nuevo.codigo, nombre: nuevo.nombre });
+        ? await api.crearEspecie({ nombre: nuevo.nombre })
+        : await api.crearProducto({ nombre: nuevo.nombre });
       await cargar();
       setNuevo(null);
       if (form && form.tipo === 'receta') {
@@ -366,7 +366,6 @@ export default function Settings({ onClose, onTrama, onSaved }) {
                 const n = data.trama.filter(t => t.linea_id === l.id).length;
                 return (
                   <div className={`set-row ${l.activa ? '' : 'off'}`} key={l.id}>
-                    <span className="badge">{l.codigo}</span>
                     <div className="grow">
                       <b>{l.nombre}</b>
                       <small>{n} máquinas{l.descripcion ? ' · ' + l.descripcion : ''}{l.activa ? '' : ' · inactiva'}</small>
@@ -398,7 +397,6 @@ export default function Settings({ onClose, onTrama, onSaved }) {
                   <div className="set-list">
                     {ms.map(m => (
                       <div className={`set-row ${m.activa ? '' : 'off'}`} key={m.id}>
-                        <span className="badge sm">{m.codigo}</span>
                         <div className="grow">
                           <b>{m.nombre}</b>
                           <small>{m.nombre_corto} · criticidad {m.criticidad}{m.activa ? '' : ' · inactiva'}</small>
@@ -518,11 +516,8 @@ export default function Settings({ onClose, onTrama, onSaved }) {
             <div className="form-grid">
               {form.tipo === 'linea' && (
                 <>
-                  <label>Nombre<input id="form-first" value={form.valores.nombre}
+                  <label className="wide">Nombre<input id="form-first" value={form.valores.nombre}
                     onChange={e => set('nombre', e.target.value)} placeholder="Línea 4 · Jibia" /></label>
-                  <label>Código <span className="opt">opcional · se genera solo</span>
-                    <input value={form.valores.codigo}
-                      onChange={e => set('codigo', e.target.value)} placeholder="automático" /></label>
                   <label className="wide">Descripción<input value={form.valores.descripcion || ''}
                     onChange={e => set('descripcion', e.target.value)} placeholder="Recepción → cocido → empaque" /></label>
                   <label className="check"><input type="checkbox" checked={!!form.valores.activa}
@@ -546,9 +541,7 @@ export default function Settings({ onClose, onTrama, onSaved }) {
                     onChange={e => set('criticidad', Number(e.target.value))}>
                     <option value={1}>1 · alta</option><option value={2}>2 · media</option><option value={3}>3 · baja</option>
                   </select></label>
-                  <label>Código <span className="opt">opcional · se genera solo</span>
-                    <input value={form.valores.codigo}
-                      onChange={e => set('codigo', e.target.value)} placeholder="automático" /></label>
+
                   <label className="check"><input type="checkbox" checked={!!form.valores.activa}
                     onChange={e => set('activa', e.target.checked)} /> Activa</label>
 
@@ -591,9 +584,7 @@ export default function Settings({ onClose, onTrama, onSaved }) {
 
               {form.tipo === 'receta' && (
                 <>
-                  <label>Código<input id="form-first" value={form.valores.codigo}
-                    onChange={e => set('codigo', e.target.value)} placeholder="R-JIB-ALET" /></label>
-                  <label>Nombre<input value={form.valores.nombre}
+                  <label>Nombre<input id="form-first" value={form.valores.nombre}
                     onChange={e => set('nombre', e.target.value)} placeholder="Jibia aleta · L4" /></label>
 
                   <label>Especie
@@ -743,10 +734,11 @@ export default function Settings({ onClose, onTrama, onSaved }) {
                 <button className="x" onClick={() => setNuevo(null)}>✕</button>
               </div>
               <div className="form-grid">
-                <label>Código<input value={nuevo.codigo}
-                  onChange={e => setNuevo({ ...nuevo, codigo: e.target.value })} placeholder="JIB" /></label>
-                <label>Nombre<input value={nuevo.nombre}
-                  onChange={e => setNuevo({ ...nuevo, nombre: e.target.value })} placeholder="Jibia" /></label>
+                <label className="wide">Nombre
+                  <input autoFocus value={nuevo.nombre}
+                         onChange={e => setNuevo({ ...nuevo, nombre: e.target.value })}
+                         placeholder="Reineta" />
+                </label>
               </div>
               <div className="form-foot">
                 <button className="ghost" onClick={() => setNuevo(null)}>Cancelar</button>
@@ -903,7 +895,6 @@ export default function Settings({ onClose, onTrama, onSaved }) {
             <div className="areas-list">
               {areasEdit.map((a, i) => (
                 <div className="area-row" key={a.id || 'nueva' + i}>
-                  <span className="badge sm">{a.codigo || 'nueva'}</span>
                   <input value={a.nombre} placeholder="Nombre del área"
                          onChange={e => setArea(i, 'nombre', e.target.value)} />
                   <input className="ord" type="number" min="0" value={a.orden ?? 0}
