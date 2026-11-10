@@ -718,33 +718,51 @@ export default function App() {
             <button className="x" onClick={() => setEditor(null)}>✕</button>
           </div>
 
-          <div className="trama">
+          <div className="tf-body">
+          <div className="trama-flow">
             {editor.filas.map((f, i) => (
-              <div className="trama-row" key={f.maquina_id} id={'tr-' + f.maquina_id}>
-                <span className="pos">{i + 1}</span>
-                <b>{f.nombre_corto}</b>
-                <span className="area">{f.area}</span>
-                <label className={`cuello ${f.detiene_linea ? 'on' : ''}`}>
-                  <input type="radio" name="cuello" checked={f.detiene_linea} onChange={() => marcarCuello(i)} />
-                  cuello de línea
-                </label>
-                <div className="acciones">
-                  <button onClick={() => mover(i, -1)} disabled={i === 0}>↑</button>
-                  <button onClick={() => mover(i, 1)} disabled={i === editor.filas.length - 1}>↓</button>
-                  <button onClick={() => quitar(i)} disabled={editor.filas.length === 1}>✕</button>
+              <div className="tf-cell" key={f.maquina_id} id={'tr-' + f.maquina_id}>
+                {i > 0 && <span className="tf-arrow">→</span>}
+                <div className={`tf-card ${f.detiene_linea ? 'is-cuello' : ''}`}>
+                  <div className="tf-head">
+                    <span className="tf-etapa">Etapa {i + 1}</span>
+                    {f.detiene_linea && <span className="tf-tag">cuello</span>}
+                  </div>
+
+                  <b className="tf-name">{f.nombre_corto}</b>
+                  <span className="tf-area">{f.area}</span>
+
+                  <label className="tf-cuello">
+                    <input type="radio" name="cuello" checked={f.detiene_linea}
+                           onChange={() => marcarCuello(i)} />
+                    cuello de línea
+                  </label>
+
+                  <div className="tf-actions">
+                    <button onClick={() => mover(i, -1)} disabled={i === 0} title="Mover a la izquierda">←</button>
+                    <button onClick={() => mover(i, 1)} disabled={i === editor.filas.length - 1} title="Mover a la derecha">→</button>
+                    <button className="danger" onClick={() => quitar(i)} disabled={editor.filas.length === 1} title="Quitar">✕</button>
+                  </div>
                 </div>
               </div>
             ))}
+
+            <div className="tf-cell tf-add-cell">
+              <button className="tf-add" title="Agregar equipo"
+                      onClick={() => document.getElementById('add-maquina')?.focus()}>＋</button>
+            </div>
           </div>
 
           <div className="add-row">
-            <select value={editor.nueva} onChange={e => setEditor(prev => ({ ...prev, nueva: e.target.value }))}>
+            <select id="add-maquina" value={editor.nueva}
+                    onChange={e => setEditor(prev => ({ ...prev, nueva: e.target.value }))}>
               <option value="">Agregar máquina…</option>
               {disponibles.map(m => (
                 <option key={m.id} value={m.id}>{m.nombre_corto} · {m.area}</option>
               ))}
             </select>
             <button onClick={agregarMaquina} disabled={!editor.nueva}>Agregar</button>
+          </div>
           </div>
 
           <div className="editor-foot">

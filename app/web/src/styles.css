@@ -622,3 +622,46 @@ header{
 .proc-maquinas .tile{min-height:78px;height:auto;padding:10px 12px}
 .proc-maquinas .tile .name{font-size:15px}
 .proc-arrow{color:#9FB2C4;font-size:20px;margin:0 10px;flex:0 0 auto}
+
+/* ---------------- editor de trama como organigrama ---------------- */
+.trama-flow{display:flex;align-items:stretch;overflow-x:auto;padding:18px 10px 10px 26px;margin:0}
+.tf-cell{position:relative;display:flex;align-items:stretch;flex:0 0 auto}
+.tf-arrow{position:absolute;left:-20px;top:50%;transform:translateY(-50%);color:#9FB2C4;font-size:18px;line-height:1}
+.tf-card{
+  width:205px;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:13px;
+  display:flex;flex-direction:column;gap:9px;box-shadow:var(--shadow);min-height:210px;
+}
+.tf-card.is-cuello{border-color:#E0C48C;background:var(--plan-bg)}
+.tf-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.tf-etapa{font:700 10.5px ui-monospace,monospace;letter-spacing:1.4px;text-transform:uppercase;color:var(--dim)}
+.tf-tag{
+  font-size:9.5px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--plan);
+  border:1px solid #E0C48C;background:#fff;border-radius:6px;padding:2px 6px;
+}
+.tf-name{font-size:17px;line-height:1.2;letter-spacing:-.2px}
+.tf-area{font-size:12px;color:var(--muted)}
+.tf-cuello{
+  display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);cursor:pointer;
+  margin-top:auto;white-space:nowrap;
+}
+.tf-cuello input{width:18px;height:18px;accent-color:var(--amber)}
+.tf-actions{display:flex;gap:6px}
+.tf-actions button{
+  flex:1;height:42px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);
+  color:var(--ink);cursor:pointer;font-size:15px;
+}
+.tf-actions button:hover{background:#E7EEF6}
+.tf-actions button:disabled{opacity:.3;cursor:default}
+.tf-actions button.danger{color:var(--stop);border-color:#EFC4BF}
+.tf-add-cell{align-items:stretch;padding-left:20px}
+.tf-add{
+  width:74px;border:2px dashed var(--line2);border-radius:16px;background:#fff;color:var(--accent);
+  font-size:26px;cursor:pointer;min-height:210px;
+}
+.tf-add:hover{background:var(--accent-bg)}
+@media (max-width:900px){ .tf-card{width:190px;min-height:190px} }
+
+.trama-flow::-webkit-scrollbar{height:8px}
+.trama-flow::-webkit-scrollbar-thumb{background:#CBD8E4;border-radius:4px}
+
+.tf-body{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;gap:14px}
