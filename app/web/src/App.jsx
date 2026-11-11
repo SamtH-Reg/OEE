@@ -50,6 +50,7 @@ export default function App() {
   const [cable, setCable] = useState(null);         // conexión que se está dibujando
   const [moviendo, setMoviendo] = useState(null);   // tarjeta que se arrastra
   const [avisoEditor, setAvisoEditor] = useState(null);
+  const [zoom, setZoom] = useState(1);
   const [arrastre, setArrastre] = useState(null);   // maquina_id que se está moviendo
   const [sobre, setSobre] = useState(null);         // destino bajo el cursor
   const [toast, setToast] = useState(null);
@@ -507,7 +508,7 @@ export default function App() {
     const x0 = e.clientX, y0 = e.clientY, ox = f.x, oy = f.y;
     setMoviendo(f.maquina_id);
     const mover = (ev) => {
-      const dx = ev.clientX - x0, dy = ev.clientY - y0;
+      const dx = (ev.clientX - x0) / zoom, dy = (ev.clientY - y0) / zoom;
       setEditor(prev => ({
         ...prev,
         filas: prev.filas.map(k => k.maquina_id === f.maquina_id
@@ -626,8 +627,8 @@ export default function App() {
   // tamaño del lienzo según la tarjeta más lejana
   const lienzo = useMemo(() => {
     const filas = editor?.filas || [];
-    const w = Math.max(1200, ...filas.map(f => (f.x || 0) + 340));
-    const h = Math.max(620, ...filas.map(f => (f.y || 0) + 340));
+    const w = Math.max(2800, ...filas.map(f => (f.x || 0) + 700));
+    const h = Math.max(1700, ...filas.map(f => (f.y || 0) + 500));
     return { w, h };
   }, [editor]);
 
@@ -872,10 +873,10 @@ export default function App() {
         if (!a || !b) continue;
         const ra = a.getBoundingClientRect();
         const rb = b.getBoundingClientRect();
-        const x1 = ra.right - base.left + cont.scrollLeft;
-        const y1 = ra.top + ra.height / 2 - base.top + cont.scrollTop;
-        const x2 = rb.left - base.left + cont.scrollLeft;
-        const y2 = rb.top + rb.height / 2 - base.top + cont.scrollTop;
+        const x1 = (ra.right - base.left) / zoom + cont.scrollLeft;
+        const y1 = (ra.top + ra.height / 2 - base.top) / zoom + cont.scrollTop;
+        const x2 = (rb.left - base.left) / zoom + cont.scrollLeft;
+        const y2 = (rb.top + rb.height / 2 - base.top) / zoom + cont.scrollTop;
         const dx = Math.max(26, Math.abs(x2 - x1) * 0.45);
         out.push({
           k: c.desde_maquina_id + '-' + c.hasta_maquina_id,
@@ -1286,7 +1287,13 @@ export default function App() {
                 {avisoEditor && <span className="tf-aviso-mov">{avisoEditor}</span>}
               </div>
             )}
-            <div className="tf-canvas" ref={flowRef} style={{ width: lienzo.w, height: lienzo.h }}>
+            <div className="tf-zoom-wrap"
+                 style={{ width: lienzo.w * zoom, height: lienzo.h * zoom }}>
+            <div className="tf-canvas" ref={flowRef}
+                 style={{
+                   width: lienzo.w, height: lienzo.h,
+                   transform: `scale(${zoom})`, transformOrigin: '0 0'
+                 }}>
               <svg className="tf-links" width={dims.w} height={dims.h}
                    viewBox={`0 0 ${Math.max(dims.w, 1)} ${Math.max(dims.h, 1)}`}>
                 {links.map(l => (
@@ -1379,6 +1386,7 @@ export default function App() {
                 );
               })}
             </div>
+            </div>
 
           <div className="add-row">
             <select id="add-maquina" value={editor.nueva}
@@ -1396,6 +1404,11 @@ export default function App() {
 
           <div className="editor-foot">
             <span className="err">{editor.error || ''}</span>
+            <div className="tf-zoom">
+              <button onClick={() => setZoom(z => Math.max(0.4, +(z - 0.1).toFixed(2)))} title="Alejar">−</button>
+              <span>{Math.round(zoom * 100)}%</span>
+              <button onClick={() => setZoom(z => Math.min(1.6, +(z + 0.1).toFixed(2)))} title="Acercar">＋</button>
+            </div>
             <button className="ghost" onClick={() => setEditor(null)}>Cancelar</button>
             <button className="btn-go small" onClick={guardarTrama} disabled={editor.guardando}>
               {editor.guardando ? 'Guardando…' : 'Guardar trama'}
