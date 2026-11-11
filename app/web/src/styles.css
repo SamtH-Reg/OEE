@@ -695,3 +695,11 @@ header{
   content:"";position:absolute;left:-18px;top:24px;bottom:8px;width:2px;border-radius:2px;background:#C5D4E2;
 }
 .flow-col .arrow{left:auto;right:-26px;top:46%}
+
+/* ---------------- arrastrar y soltar en la trama ---------------- */
+.tf-card{cursor:grab}
+.tf-card:active{cursor:grabbing}
+.tf-card.dragging{opacity:.45;border-style:dashed}
+.tf-col.drop-zone{background:var(--accent-bg);border-radius:16px;outline:2px dashed #9CC3E4;outline-offset:4px}
+.tf-card.drop-target{outline:2px solid var(--accent);outline-offset:2px}
+.tf-add-cell.drop-zone .tf-add{background:var(--accent-bg);border-color:var(--accent)}

@@ -39,6 +39,8 @@ export default function App() {
   const [ajustes, setAjustes] = useState(false);
   const [sheet, setSheet] = useState(null);
   const [editor, setEditor] = useState(null);
+  const [arrastre, setArrastre] = useState(null);   // maquina_id que se está moviendo
+  const [sobre, setSobre] = useState(null);         // destino bajo el cursor
   const [toast, setToast] = useState(null);
   const [pend, setPend] = useState(0);
   const [online, setOnline] = useState(navigator.onLine);
@@ -439,6 +441,45 @@ export default function App() {
     enfocar(maquinaId);
   };
 
+  // ---- arrastrar y soltar (mouse) ----
+  function soltarEnCard(dragId, destinoId, despues) {
+    if (!dragId || dragId === destinoId) return;
+    editar(filas => {
+      const dest = filas.find(f => f.maquina_id === destinoId);
+      if (!dest) return filas;
+      const rama = dest.rama + (despues ? 0.5 : -0.5);
+      return renum(filas.map(f =>
+        f.maquina_id === dragId ? { ...f, posicion: dest.posicion, rama } : f));
+    });
+    setSobre(null);
+    setArrastre(null);
+    enfocar(dragId);
+  }
+
+  function soltarEnEtapa(dragId, posicion) {
+    if (!dragId) return;
+    editar(filas => {
+      const enEtapa = filas.filter(f => f.posicion === posicion).length;
+      return renum(filas.map(f =>
+        f.maquina_id === dragId ? { ...f, posicion, rama: enEtapa + 0.5 } : f));
+    });
+    setSobre(null);
+    setArrastre(null);
+    enfocar(dragId);
+  }
+
+  function soltarEnNuevaEtapa(dragId) {
+    if (!dragId) return;
+    editar(filas => {
+      const max = Math.max(...filas.map(f => f.posicion));
+      return renum(filas.map(f =>
+        f.maquina_id === dragId ? { ...f, posicion: max + 1, rama: 1 } : f));
+    });
+    setSobre(null);
+    setArrastre(null);
+    enfocar(dragId);
+  }
+
   const quitar = (maquinaId) => editar(filas => renum(filas.filter(f => f.maquina_id !== maquinaId)));
 
   const marcarCuello = (maquinaId) =>
@@ -799,7 +840,8 @@ export default function App() {
             <div>
               <h3>Trama · {editor.linea.nombre}</h3>
               <div className="sub">
-                El orden es el flujo de la línea. Solo un cuello de botella, y ese detiene la línea completa.
+                Arrastrá las tarjetas para cambiar de etapa o de rama. Solo un cuello de botella,
+                y ese detiene la línea completa.
               </div>
             </div>
             <button className="x" onClick={() => setEditor(null)}>✕</button>
@@ -808,13 +850,37 @@ export default function App() {
           <div className="tf-body">
           <div className="trama-flow">
             {columnasEditor.map((col, ci) => (
-              <div className={`tf-col ${col.filas.length > 1 ? 'multi' : ''}`} key={col.pos}>
+              <div className={`tf-col ${col.filas.length > 1 ? 'multi' : ''} ${sobre === 'col:' + col.pos ? 'drop-zone' : ''}`}
+                   key={col.pos}>
                 <span className="tf-etapa-h">Etapa {col.pos}</span>
 
-                <div className="tf-stack">
+                <div className="tf-stack"
+                     onDragOver={e => { e.preventDefault(); setSobre('col:' + col.pos); }}
+                     onDrop={e => {
+                       e.preventDefault();
+                       const id = Number(e.dataTransfer.getData('text/plain'));
+                       soltarEnEtapa(id, col.pos);
+                     }}>
                   {col.filas.map(f => (
-                    <div className={`tf-card ${f.detiene_linea ? 'is-cuello' : ''}`}
-                         key={f.maquina_id} id={'tr-' + f.maquina_id}>
+                    <div className={`tf-card ${f.detiene_linea ? 'is-cuello' : ''}
+                                     ${arrastre === f.maquina_id ? 'dragging' : ''}
+                                     ${sobre === 'card:' + f.maquina_id ? 'drop-target' : ''}`}
+                         key={f.maquina_id} id={'tr-' + f.maquina_id}
+                         draggable
+                         onDragStart={e => {
+                           e.dataTransfer.effectAllowed = 'move';
+                           e.dataTransfer.setData('text/plain', String(f.maquina_id));
+                           setArrastre(f.maquina_id);
+                         }}
+                         onDragEnd={() => { setArrastre(null); setSobre(null); }}
+                         onDragOver={e => { e.preventDefault(); setSobre('card:' + f.maquina_id); }}
+                         onDrop={e => {
+                           e.preventDefault();
+                           e.stopPropagation();
+                           const id = Number(e.dataTransfer.getData('text/plain'));
+                           const r = e.currentTarget.getBoundingClientRect();
+                           soltarEnCard(id, f.maquina_id, e.clientY > r.top + r.height / 2);
+                         }}>
                       <div className="tf-head">
                         <span className="tf-etapa">Rama {f.rama}</span>
                         {f.detiene_linea && <span className="tf-tag">cuello</span>}
@@ -844,8 +910,14 @@ export default function App() {
               </div>
             ))}
 
-            <div className="tf-cell tf-add-cell">
-              <button className="tf-add" title="Agregar equipo"
+            <div className={`tf-cell tf-add-cell ${sobre === 'nueva' ? 'drop-zone' : ''}`}
+                 onDragOver={e => { e.preventDefault(); setSobre('nueva'); }}
+                 onDrop={e => {
+                   e.preventDefault();
+                   const id = Number(e.dataTransfer.getData('text/plain'));
+                   soltarEnNuevaEtapa(id);
+                 }}>
+              <button className="tf-add" title="Agregar equipo o soltar acá para nueva etapa"
                       onClick={() => document.getElementById('add-maquina')?.focus()}>＋</button>
             </div>
           </div>
