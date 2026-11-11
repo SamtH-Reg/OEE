@@ -398,12 +398,15 @@ export default function App() {
   // (siguiendo las conexiones «entra de»).
   function conNiveles(filas, cons) {
     const porId = new Map(filas.map(f => [f.maquina_id, f]));
-    // Línea sin conexiones todavía: se mantiene el orden guardado
-    if (!cons || cons.length === 0) {
+    // Línea sin conexiones propias: se mantiene el orden guardado
+    const ids = new Set(filas.map(f => f.maquina_id));
+    const propias = (cons || []).filter(c =>
+      ids.has(c.desde_maquina_id) && ids.has(c.hasta_maquina_id));
+    if (!propias.length) {
       return filas.map(f => ({ ...f, posicion: f.posicion || 1, rama: f.rama || 1 }));
     }
     const entradas = new Map();
-    for (const c of (cons || [])) {
+    for (const c of propias) {
       if (!entradas.has(c.hasta_maquina_id)) entradas.set(c.hasta_maquina_id, []);
       entradas.get(c.hasta_maquina_id).push(c.desde_maquina_id);
     }
