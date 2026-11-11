@@ -819,3 +819,7 @@ header{
   height:46px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);
   font:13.5px inherit;padding:0 10px;flex:0 0 auto;
 }
+
+/* puerto de salida extra a la izquierda: permite conectar hacia atrás */
+.tf-port.out.izq{left:-8px;right:auto;top:68%;cursor:crosshair}
+.tf-port.in{top:46%}

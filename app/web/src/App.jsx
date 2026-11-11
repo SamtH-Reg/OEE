@@ -910,12 +910,14 @@ export default function App() {
         const y1 = (ra.top + ra.height / 2 - base.top) / zoom + cont.scrollTop;
         const x2 = (rb.left - base.left) / zoom + cont.scrollLeft;
         const y2 = (rb.top + rb.height / 2 - base.top) / zoom + cont.scrollTop;
-        const dx = Math.max(26, Math.abs(x2 - x1) * 0.45);
+        const dx = Math.max(30, Math.abs(x2 - x1) * 0.45);
+        const d = x2 >= x1
+          ? `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`
+          : `M ${x1} ${y1} C ${x1 - dx} ${y1}, ${x2 + dx} ${y2}, ${x2} ${y2}`;
         out.push({
           k: c.desde_maquina_id + '-' + c.hasta_maquina_id,
           color: PALETA[fuentes.indexOf(c.desde_maquina_id) % PALETA.length],
-          x1, y1, x2, y2,
-          d: `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`
+          x1, y1, x2, y2, d
         });
       }
       setDims({ w: cont.scrollWidth, h: cont.scrollHeight });
@@ -927,7 +929,7 @@ export default function App() {
   }, [editor]);
 
   // Arrastrar desde el puerto de salida para conectar (estilo n8n)
-  function iniciarCable(e, desdeId) {
+  function iniciarCable(e, desdeId, lado = 'der') {
     e.preventDefault();
     e.stopPropagation();
     const cont = flowRef.current;
@@ -935,10 +937,12 @@ export default function App() {
     const base = cont.getBoundingClientRect();
     const card = document.getElementById('tr-' + desdeId);
     const rc = card?.getBoundingClientRect();
+    const borde = rc ? (lado === 'izq' ? rc.left : rc.right) : e.clientX;
+    const alto = rc ? (lado === 'izq' ? rc.top + rc.height * 0.72 : rc.top + rc.height / 2) : e.clientY;
     setCable({
       desde: desdeId,
-      x1: (rc ? rc.right : e.clientX) - base.left + cont.scrollLeft,
-      y1: (rc ? rc.top + rc.height / 2 : e.clientY) - base.top + cont.scrollTop,
+      x1: borde - base.left + cont.scrollLeft,
+      y1: alto - base.top + cont.scrollTop,
       x: e.clientX - base.left + cont.scrollLeft,
       y: e.clientY - base.top + cont.scrollTop
     });
@@ -1363,6 +1367,12 @@ export default function App() {
                        }}
                        onPointerDown={e => iniciarMover(e, f)}>
                       <span className="tf-port in" title="Entrada" />
+                      <span className={`tf-port out izq ${conexionesSalidaDe(f.maquina_id).length ? 'activo' : ''}`}
+                            title="Arrastrá para conectar hacia atrás"
+                            style={conexionesSalidaDe(f.maquina_id).length
+                              ? { borderColor: colorFuente(f.maquina_id), background: colorFuente(f.maquina_id) }
+                              : undefined}
+                            onPointerDown={e => iniciarCable(e, f.maquina_id, 'izq')} />
                       <span className={`tf-port out ${conexionesSalidaDe(f.maquina_id).length ? 'activo' : ''}`}
                             title="Arrastrá para conectar"
                             style={conexionesSalidaDe(f.maquina_id).length
