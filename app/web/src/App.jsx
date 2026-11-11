@@ -48,6 +48,7 @@ export default function App() {
   const [links, setLinks] = useState([]);
   const [dims, setDims] = useState({ w: 0, h: 0 });
   const [cable, setCable] = useState(null);         // conexión que se está dibujando
+  const [moviendo, setMoviendo] = useState(null);   // tarjeta que se arrastra
   const [arrastre, setArrastre] = useState(null);   // maquina_id que se está moviendo
   const [sobre, setSobre] = useState(null);         // destino bajo el cursor
   const [toast, setToast] = useState(null);
@@ -476,7 +477,9 @@ export default function App() {
       .map(t => ({
         maquina_id: t.maquina_id, nombre_corto: t.nombre_corto,
         area: t.area, detiene_linea: t.detiene_linea,
-        posicion: t.posicion, rama: t.rama || 1
+        posicion: t.posicion, rama: t.rama || 1,
+        x: t.pos_x ?? 30 + ((t.posicion || 1) - 1) * 330,
+        y: t.pos_y ?? 24 + ((t.rama || 1) - 1) * 300
       }));
     const cons = (conexiones || [])
       .filter(c => c.linea_id === lineaId)
@@ -491,6 +494,39 @@ export default function App() {
       return e;
     });
   }
+
+  // arrastrar la tarjeta libremente por el lienzo
+  function iniciarMover(e, f) {
+    if (e.button !== 0) return;
+    if (e.target.closest && e.target.closest('.tf-port, button, input, select, label')) return;
+    e.preventDefault();
+    const x0 = e.clientX, y0 = e.clientY, ox = f.x, oy = f.y;
+    setMoviendo(f.maquina_id);
+    const mover = (ev) => {
+      const dx = ev.clientX - x0, dy = ev.clientY - y0;
+      setEditor(prev => ({
+        ...prev,
+        filas: prev.filas.map(k => k.maquina_id === f.maquina_id
+          ? { ...k, x: Math.max(0, Math.round(ox + dx)), y: Math.max(0, Math.round(oy + dy)) }
+          : k)
+      }));
+    };
+    const soltar = () => {
+      setMoviendo(null);
+      window.removeEventListener('pointermove', mover);
+      window.removeEventListener('pointerup', soltar);
+    };
+    window.addEventListener('pointermove', mover);
+    window.addEventListener('pointerup', soltar);
+  }
+
+  // tamaño del lienzo según la tarjeta más lejana
+  const lienzo = useMemo(() => {
+    const filas = editor?.filas || [];
+    const w = Math.max(1200, ...filas.map(f => (f.x || 0) + 340));
+    const h = Math.max(620, ...filas.map(f => (f.y || 0) + 340));
+    return { w, h };
+  }, [editor]);
 
   // etapas y ramas densas: 1..N, sin huecos
   function renum(lista) {
@@ -638,10 +674,12 @@ export default function App() {
     if (!id) return;
     const m = maqs.find(x => x.id === id);
     if (!m) return;
-    const max = editor.filas.length ? Math.max(...editor.filas.map(f => f.posicion)) : 0;
+    const maxPos = editor.filas.length ? Math.max(...editor.filas.map(f => f.posicion)) : 0;
+    const maxX = editor.filas.length ? Math.max(...editor.filas.map(f => f.x || 0)) : 0;
     editar(filas => renum([...filas, {
       maquina_id: m.id, nombre_corto: m.nombre_corto, area: m.area,
-      detiene_linea: false, posicion: max + 1, rama: 1
+      detiene_linea: false, posicion: maxPos + 1, rama: 1,
+      x: maxX + 330, y: 24
     }]));
     setEditor(prev => ({ ...prev, nueva: '' }));
   }
@@ -653,7 +691,8 @@ export default function App() {
       await api.guardarTrama(editor.linea.linea_id,
         orden.map(f => ({
           maquina_id: f.maquina_id, detiene_linea: f.detiene_linea,
-          posicion: f.posicion, rama: f.rama
+          posicion: f.posicion, rama: f.rama,
+          pos_x: f.x ?? null, pos_y: f.y ?? null
         })),
         editor.conexiones || []
       );
@@ -1094,57 +1133,36 @@ export default function App() {
           </div>
 
           <div className="tf-body">
-          <div className={`trama-flow ${links.length ? 'con-links' : ''}`} ref={flowRef}>
-            <svg className="tf-links" width={dims.w} height={dims.h}
-                 viewBox={`0 0 ${Math.max(dims.w, 1)} ${Math.max(dims.h, 1)}`}>
-              <defs>
-                <marker id="tf-arrow" viewBox="0 0 10 10" refX="8" refY="5"
-                        markerWidth="7" markerHeight="7" orient="auto">
-                  <path d="M0,1 L9,5 L0,9" fill="#7FB3D9" />
-                </marker>
-              </defs>
-              {links.map(l => (
-                <g key={l.k}>
-                  <path d={l.d} fill="none" stroke={l.color} strokeWidth="2.2" opacity=".9" />
-                  <circle cx={l.x2} cy={l.y2} r="4" fill={l.color} />
-                  <circle cx={l.x1} cy={l.y1} r="3" fill={l.color} opacity=".9" />
-                </g>
-              ))}
-              {cable && (
-                <path d={`M ${cable.x1} ${cable.y1} C ${cable.x1 + 40} ${cable.y1}, ${cable.x - 40} ${cable.y}, ${cable.x} ${cable.y}`}
-                      fill="none" stroke="#7FB3D9" strokeWidth="2" strokeDasharray="5 4" opacity=".75" />
-              )}
-            </svg>
+            <div className="tf-canvas" ref={flowRef} style={{ width: lienzo.w, height: lienzo.h }}>
+              <svg className="tf-links" width={dims.w} height={dims.h}
+                   viewBox={`0 0 ${Math.max(dims.w, 1)} ${Math.max(dims.h, 1)}`}>
+                {links.map(l => (
+                  <g key={l.k}>
+                    <path d={l.d} fill="none" stroke={l.color} strokeWidth="2.4" opacity=".92" />
+                    <circle cx={l.x2} cy={l.y2} r="4.5" fill={l.color} />
+                    <circle cx={l.x1} cy={l.y1} r="3" fill={l.color} opacity=".9" />
+                  </g>
+                ))}
+                {cable && (
+                  <path d={`M ${cable.x1} ${cable.y1} C ${cable.x1 + 50} ${cable.y1}, ${cable.x - 50} ${cable.y}, ${cable.x} ${cable.y}`}
+                        fill="none" stroke="#7FB3D9" strokeWidth="2" strokeDasharray="5 4" opacity=".8" />
+                )}
+              </svg>
 
-            {columnasEditor.map((col, ci) => (
-              <div className={`tf-col ${col.filas.length > 1 ? 'multi' : ''}`} key={col.pos}>
-                <span className="tf-etapa-h">Etapa {col.pos}</span>
-
-                <div className="tf-stack">
-                  {col.filas.map(f => (
-                    <div className={`tf-card ${f.detiene_linea ? 'is-cuello' : ''}
-                                     ${arrastre === f.maquina_id ? 'dragging' : ''}
-                                     ${sobre === 'card:' + f.maquina_id ? 'drop-target' : ''}`}
-                         key={f.maquina_id} id={'tr-' + f.maquina_id}
-                         draggable
-                         onDragStart={e => {
-                           if (e.target.closest && e.target.closest('.tf-port')) {
-                             e.preventDefault();
-                             return;
-                           }
-                           e.dataTransfer.effectAllowed = 'move';
-                           e.dataTransfer.setData('text/plain', String(f.maquina_id));
-                           setArrastre(f.maquina_id);
-                         }}
-                         onDragEnd={() => { setArrastre(null); setSobre(null); }}
-                         onDragOver={e => { e.preventDefault(); setSobre('card:' + f.maquina_id); }}
-                         onDrop={e => {
-                           e.preventDefault();
-                           e.stopPropagation();
-                           const id = Number(e.dataTransfer.getData('text/plain'));
-                           const r = e.currentTarget.getBoundingClientRect();
-                           soltarEnCard(id, f.maquina_id, e.clientY > r.top + r.height / 2);
-                         }}>
+              {editor.filas.map(f => {
+                const salientes = conexionesSalidaDe(f.maquina_id).length > 0;
+                return (
+                  <div key={f.maquina_id} id={'tr-' + f.maquina_id}
+                       className={`tf-card ${f.detiene_linea ? 'is-cuello' : ''}
+                                   ${moviendo === f.maquina_id ? 'dragging' : ''}`}
+                       style={{
+                         left: f.x, top: f.y,
+                         borderColor: salientes ? colorFuente(f.maquina_id) : undefined,
+                         boxShadow: salientes
+                           ? `0 0 0 1px ${colorFuente(f.maquina_id)}33, 0 8px 20px -14px rgba(15,27,39,.5)`
+                           : undefined
+                       }}
+                       onPointerDown={e => iniciarMover(e, f)}>
                       <span className="tf-port in" title="Entrada" />
                       <span className={`tf-port out ${conexionesSalidaDe(f.maquina_id).length ? 'activo' : ''}`}
                             title="Arrastrá para conectar"
@@ -1195,25 +1213,10 @@ export default function App() {
                       <div className="tf-actions">
                         <button className="danger" onClick={() => quitar(f.maquina_id)} title="Quitar">✕</button>
                       </div>
-                    </div>
-                  ))}
-                </div>
-
-                {ci < columnasEditor.length - 1 && <span className="tf-arrow">→</span>}
-              </div>
-            ))}
-
-            <div className={`tf-cell tf-add-cell ${sobre === 'nueva' ? 'drop-zone' : ''}`}
-                 onDragOver={e => { e.preventDefault(); setSobre('nueva'); }}
-                 onDrop={e => {
-                   e.preventDefault();
-                   const id = Number(e.dataTransfer.getData('text/plain'));
-                   soltarEnNuevaEtapa(id);
-                 }}>
-              <button className="tf-add" title="Agregar equipo o soltar acá para nueva etapa"
-                      onClick={() => document.getElementById('add-maquina')?.focus()}>＋</button>
+                  </div>
+                );
+              })}
             </div>
-          </div>
 
           <div className="add-row">
             <select id="add-maquina" value={editor.nueva}

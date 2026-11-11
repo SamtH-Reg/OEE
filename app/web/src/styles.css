@@ -766,3 +766,11 @@ header{
 .trama-flow.con-links .tf-arrow{display:none}
 .trama-flow.con-links .tf-col.multi::before,
 .trama-flow.con-links .tf-col.multi::after{content:none}
+
+/* ---------------- lienzo libre ---------------- */
+.tf-body{display:block;overflow:auto;padding:0}
+.tf-canvas{position:relative;min-width:100%;min-height:100%;padding:0}
+.tf-canvas .tf-card{position:absolute;width:248px;cursor:grab}
+.tf-canvas .tf-card.dragging{cursor:grabbing;z-index:5;box-shadow:0 18px 40px -18px rgba(15,27,39,.55)}
+.tf-canvas .tf-links{position:absolute;left:0;top:0;pointer-events:none;z-index:0;overflow:visible}
+.tf-canvas .tf-card{z-index:1}
