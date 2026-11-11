@@ -31,6 +31,18 @@ app.addHook('onRequest', async (req, reply) => {
 
 const q = (sql, params) => pool.query(sql, params);
 
+// En local, cada carga del HTML invalida la caché del navegador: evita quedarse
+// con un build viejo servido por el service worker.
+app.addHook('onSend', async (req, reply, payload) => {
+  const host = req.headers.host || '';
+  if (/^(localhost|127\.0\.0\.1)(:|$)/.test(host) &&
+      req.method === 'GET' &&
+      (req.url === '/' || req.url.startsWith('/?'))) {
+    reply.header('Clear-Site-Data', '"cache"');
+  }
+  return payload;
+});
+
 // Una tablet que sincroniza es una tablet real: se registra sola la primera vez.
 async function asegurarDispositivo(id) {
   if (!id) return;

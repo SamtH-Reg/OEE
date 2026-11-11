@@ -9,6 +9,10 @@ import Settings from './Settings';
 
 const nf = new Intl.NumberFormat('es-CL');
 
+// un color por bloque de origen, para seguir las conexiones de un vistazo
+const PALETA = ['#2F80ED', '#27AE60', '#E58E26', '#9B51E0', '#EB5757',
+                '#00A3A3', '#C77DFF', '#B8860B', '#4C6EF5', '#E64980'];
+
 const ICONOS = {
   engranaje: 'M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z',
   rayo: 'M13 2 4.1 12.8a.7.7 0 0 0 .5 1.2H10l-1 8 8.9-10.8a.7.7 0 0 0-.5-1.2H13Z',
@@ -393,6 +397,11 @@ export default function App() {
     setToast(null);
   }
 
+  const conexionesSalidaDe = (id) => (editor?.conexiones || []).filter(c => c.desde_maquina_id === id);
+  function colorFuente(id) {
+    const fuentes = [...new Set((editor?.conexiones || []).map(c => c.desde_maquina_id))];
+    return PALETA[fuentes.indexOf(id) % PALETA.length];
+  }
   const entradasDe = (id) => (editor?.conexiones || [])
     .filter(c => c.hasta_maquina_id === id)
     .map(c => c.desde_maquina_id);
@@ -445,7 +454,7 @@ export default function App() {
 
   const columnasEditor = useMemo(() => {
     if (!editor) return [];
-    const filas = conNiveles(editor.filas, editor.conexiones);
+    const filas = editor.filas;
     const mapa = new Map();
     for (const f of filas) {
       if (!mapa.has(f.posicion)) mapa.set(f.posicion, []);
@@ -548,9 +557,23 @@ export default function App() {
   };
 
   // ---- arrastrar y soltar (mouse) ----
-  function soltarEnCard(dragId, destinoId) {
+  function soltarEnCard(dragId, destinoId, despues) {
     if (!dragId || dragId === destinoId) return;
-    setEntrada(dragId, destinoId, true);   // la arrastrada recibe de la destino
+    editar(filas => {
+      const dest = filas.find(f => f.maquina_id === destinoId);
+      if (!dest) return filas;
+      const rama = dest.rama + (despues ? 0.5 : -0.5);
+      return renum(filas.map(f =>
+        f.maquina_id === dragId ? { ...f, posicion: dest.posicion, rama } : f));
+    });
+    setSobre(null);
+    setArrastre(null);
+    enfocar(dragId);
+  }
+
+  function conectar(dragId, destinoId) {
+    if (!dragId || dragId === destinoId) return;
+    setEntrada(dragId, destinoId, true);
     setSobre(null);
     setArrastre(null);
     enfocar(dragId);
@@ -626,7 +649,7 @@ export default function App() {
   async function guardarTrama() {
     setEditor(prev => ({ ...prev, guardando: true, error: null }));
     try {
-      const orden = conNiveles(editor.filas, editor.conexiones);
+      const orden = editor.filas;
       await api.guardarTrama(editor.linea.linea_id,
         orden.map(f => ({
           maquina_id: f.maquina_id, detiene_linea: f.detiene_linea,
@@ -660,6 +683,7 @@ export default function App() {
       const cont = flowRef.current;
       if (!cont) return;
       const base = cont.getBoundingClientRect();
+      const fuentes = [...new Set((editor.conexiones || []).map(c => c.desde_maquina_id))];
       const out = [];
       for (const c of (editor.conexiones || [])) {
         const a = document.getElementById('tr-' + c.desde_maquina_id);
@@ -674,6 +698,7 @@ export default function App() {
         const dx = Math.max(26, Math.abs(x2 - x1) * 0.45);
         out.push({
           k: c.desde_maquina_id + '-' + c.hasta_maquina_id,
+          color: PALETA[fuentes.indexOf(c.desde_maquina_id) % PALETA.length],
           x1, y1, x2, y2,
           d: `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`
         });
@@ -1079,8 +1104,11 @@ export default function App() {
                 </marker>
               </defs>
               {links.map(l => (
-                <path key={l.k} d={l.d} fill="none" stroke="#7FB3D9" strokeWidth="2"
-                      markerEnd="url(#tf-arrow)" />
+                <g key={l.k}>
+                  <path d={l.d} fill="none" stroke={l.color} strokeWidth="2.2" opacity=".9" />
+                  <circle cx={l.x2} cy={l.y2} r="4" fill={l.color} />
+                  <circle cx={l.x1} cy={l.y1} r="3" fill={l.color} opacity=".9" />
+                </g>
               ))}
               {cable && (
                 <path d={`M ${cable.x1} ${cable.y1} C ${cable.x1 + 40} ${cable.y1}, ${cable.x - 40} ${cable.y}, ${cable.x} ${cable.y}`}
@@ -1100,6 +1128,10 @@ export default function App() {
                          key={f.maquina_id} id={'tr-' + f.maquina_id}
                          draggable
                          onDragStart={e => {
+                           if (e.target.closest && e.target.closest('.tf-port')) {
+                             e.preventDefault();
+                             return;
+                           }
                            e.dataTransfer.effectAllowed = 'move';
                            e.dataTransfer.setData('text/plain', String(f.maquina_id));
                            setArrastre(f.maquina_id);
@@ -1111,10 +1143,14 @@ export default function App() {
                            e.stopPropagation();
                            const id = Number(e.dataTransfer.getData('text/plain'));
                            const r = e.currentTarget.getBoundingClientRect();
-                           soltarEnCard(id, f.maquina_id);
+                           soltarEnCard(id, f.maquina_id, e.clientY > r.top + r.height / 2);
                          }}>
                       <span className="tf-port in" title="Entrada" />
-                      <span className="tf-port out" title="Arrastrá para conectar"
+                      <span className={`tf-port out ${conexionesSalidaDe(f.maquina_id).length ? 'activo' : ''}`}
+                            title="Arrastrá para conectar"
+                            style={conexionesSalidaDe(f.maquina_id).length
+                              ? { borderColor: colorFuente(f.maquina_id), background: colorFuente(f.maquina_id) }
+                              : undefined}
                             onPointerDown={e => iniciarCable(e, f.maquina_id)} />
 
                       <div className="tf-head">

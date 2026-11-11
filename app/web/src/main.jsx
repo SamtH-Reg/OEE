@@ -5,10 +5,5 @@ import './styles.css';
 
 createRoot(document.getElementById('root')).render(<App />);
 
-// La app debe abrir sin red: se registra el service worker una vez.
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {});
-  });
-}
-
+// Service worker desactivado: la app se sirve siempre fresca desde el disco.
+// (El modo offline para tablets se reactiva cuando se despliegue en planta.)
