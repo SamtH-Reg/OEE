@@ -735,3 +735,12 @@ header{
          display:inline-flex !important;align-items:center}
 .tf-card{min-height:0}
 .tf-col .tf-card{flex:0 0 auto}
+
+/* líneas de conexión del organigrama */
+.trama-flow{position:relative}
+.tf-links{position:absolute;left:0;top:0;pointer-events:none;overflow:visible;z-index:0}
+.tf-col{position:relative;z-index:1}
+
+/* con conexiones dibujadas, el conector gris de columna estorba */
+.trama-flow.con-links .tf-col.multi::before,
+.trama-flow.con-links .tf-col.multi::after{display:none}

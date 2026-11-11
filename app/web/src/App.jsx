@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   db, guardarCatalogo, leerCatalogo, guardarTablero, leerTablero,
   encolar, deshacer
@@ -40,6 +40,9 @@ export default function App() {
   const [ajustes, setAjustes] = useState(false);
   const [sheet, setSheet] = useState(null);
   const [editor, setEditor] = useState(null);
+  const flowRef = useRef(null);
+  const [links, setLinks] = useState([]);
+  const [dims, setDims] = useState({ w: 0, h: 0 });
   const [arrastre, setArrastre] = useState(null);   // maquina_id que se está moviendo
   const [sobre, setSobre] = useState(null);         // destino bajo el cursor
   const [toast, setToast] = useState(null);
@@ -649,6 +652,39 @@ export default function App() {
     return maqs.filter(m => !usadas.has(m.id));
   }, [editor, maqs]);
 
+  // Líneas visibles entre bloques (estilo n8n)
+  useEffect(() => {
+    if (!editor) { setLinks([]); return; }
+    const calc = () => {
+      const cont = flowRef.current;
+      if (!cont) return;
+      const base = cont.getBoundingClientRect();
+      const out = [];
+      for (const c of (editor.conexiones || [])) {
+        const a = document.getElementById('tr-' + c.desde_maquina_id);
+        const b = document.getElementById('tr-' + c.hasta_maquina_id);
+        if (!a || !b) continue;
+        const ra = a.getBoundingClientRect();
+        const rb = b.getBoundingClientRect();
+        const x1 = ra.right - base.left + cont.scrollLeft;
+        const y1 = ra.top + ra.height / 2 - base.top + cont.scrollTop;
+        const x2 = rb.left - base.left + cont.scrollLeft;
+        const y2 = rb.top + rb.height / 2 - base.top + cont.scrollTop;
+        const dx = Math.max(26, Math.abs(x2 - x1) * 0.45);
+        out.push({
+          k: c.desde_maquina_id + '-' + c.hasta_maquina_id,
+          x1, y1, x2, y2,
+          d: `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`
+        });
+      }
+      setDims({ w: cont.scrollWidth, h: cont.scrollHeight });
+      setLinks(out);
+    };
+    const t = setTimeout(calc, 90);
+    window.addEventListener('resize', calc);
+    return () => { clearTimeout(t); window.removeEventListener('resize', calc); };
+  }, [editor]);
+
   // ---- render ----
   function Tile({ m, conPosicion, forzar }) {
     let est = estadoDe(m);
@@ -985,7 +1021,21 @@ export default function App() {
           </div>
 
           <div className="tf-body">
-          <div className="trama-flow">
+          <div className={`trama-flow ${links.length ? 'con-links' : ''}`} ref={flowRef}>
+            <svg className="tf-links" width={dims.w} height={dims.h}
+                 viewBox={`0 0 ${Math.max(dims.w, 1)} ${Math.max(dims.h, 1)}`}>
+              <defs>
+                <marker id="tf-arrow" viewBox="0 0 10 10" refX="8" refY="5"
+                        markerWidth="7" markerHeight="7" orient="auto">
+                  <path d="M0,1 L9,5 L0,9" fill="#7FB3D9" />
+                </marker>
+              </defs>
+              {links.map(l => (
+                <path key={l.k} d={l.d} fill="none" stroke="#7FB3D9" strokeWidth="2"
+                      markerEnd="url(#tf-arrow)" />
+              ))}
+            </svg>
+
             {columnasEditor.map((col, ci) => (
               <div className={`tf-col ${col.filas.length > 1 ? 'multi' : ''}`} key={col.pos}>
                 <span className="tf-etapa-h">Etapa {col.pos}</span>
