@@ -3,7 +3,7 @@ import { api } from './api';
 import WizardLinea from './WizardLinea';
 
 const vacio = {
-  linea: { codigo: '', nombre: '', descripcion: '', activa: true },
+  linea: { codigo: '', nombre: '', descripcion: '', activa: true, especie_id: '', producto_id: '' },
   maquina: { area_id: '', codigo: '', nombre: '', nombre_corto: '', criticidad: 2, activa: true, causas: [] },
   receta: {
     codigo: '', nombre: '', especie_id: '', producto_id: '', linea_id: '',
@@ -26,6 +26,7 @@ export default function Settings({ onClose, onTrama, onSaved }) {
   const [nuevaFalla, setNuevaFalla] = useState(null);
   const [areasEdit, setAreasEdit] = useState(null);
   const [borrar, setBorrar] = useState(null);
+  const [borrarLinea, setBorrarLinea] = useState(null);
   const [copiar, setCopiar] = useState(null);
   const [copiarMaq, setCopiarMaq] = useState(null);
   const [aviso, setAviso] = useState(null);
@@ -184,6 +185,18 @@ export default function Settings({ onClose, onTrama, onSaved }) {
     }
   }
 
+  async function eliminarLinea() {
+    try {
+      await api.eliminarLinea(borrarLinea.linea_id || borrarLinea.id);
+      setBorrarLinea(null);
+      await cargar();
+      onSaved && onSaved();
+      setAviso('Línea eliminada. Las paradas históricas se conservan.');
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
   async function eliminarEquipo() {
     try {
       await api.eliminarMaquina(borrar.id);
@@ -272,7 +285,7 @@ export default function Settings({ onClose, onTrama, onSaved }) {
         : await api.crearProducto({ nombre: nuevo.nombre });
       await cargar();
       setNuevo(null);
-      if (form && form.tipo === 'receta') {
+      if (form && (form.tipo === 'receta' || form.tipo === 'linea')) {
         set(nuevo.tipo === 'especie' ? 'especie_id' : 'producto_id', creado.id);
       }
     } catch (e) {
@@ -377,6 +390,7 @@ export default function Settings({ onClose, onTrama, onSaved }) {
                     <button className="btn-ghost" onClick={() => onTrama(l)}>Trama</button>
                     <button className="btn-ghost" onClick={() => abrir('linea', l)}>Editar</button>
                     <button className="btn-ghost" onClick={() => abrirCopiar(l)}>Copiar</button>
+                    <button className="btn-ghost danger" onClick={() => setBorrarLinea(l)}>Eliminar</button>
                   </div>
                 );
               })}
@@ -564,6 +578,28 @@ export default function Settings({ onClose, onTrama, onSaved }) {
                 <>
                   <label className="wide">Nombre<input id="form-first" value={form.valores.nombre}
                     onChange={e => set('nombre', e.target.value)} placeholder="Línea 4 · Jibia" /></label>
+                  <label>Especie
+                    <div className="inline">
+                      <select value={form.valores.especie_id || ''}
+                        onChange={e => set('especie_id', e.target.value ? Number(e.target.value) : null)}>
+                        <option value="">—</option>
+                        {data.especies.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
+                      </select>
+                      <button type="button" className="mini"
+                              onClick={() => setNuevo({ tipo: 'especie', nombre: '' })}>＋</button>
+                    </div>
+                  </label>
+                  <label>Producto
+                    <div className="inline">
+                      <select value={form.valores.producto_id || ''}
+                        onChange={e => set('producto_id', e.target.value ? Number(e.target.value) : null)}>
+                        <option value="">—</option>
+                        {data.productos.map(pr => <option key={pr.id} value={pr.id}>{pr.nombre}</option>)}
+                      </select>
+                      <button type="button" className="mini"
+                              onClick={() => setNuevo({ tipo: 'producto', nombre: '' })}>＋</button>
+                    </div>
+                  </label>
                   <label className="wide">Descripción<input value={form.valores.descripcion || ''}
                     onChange={e => set('descripcion', e.target.value)} placeholder="Recepción → cocido → empaque" /></label>
                   <label className="check"><input type="checkbox" checked={!!form.valores.activa}
@@ -895,6 +931,26 @@ export default function Settings({ onClose, onTrama, onSaved }) {
                       disabled={copiar.guardando || !copiar.nombre.trim()}>
                 {copiar.guardando ? 'Copiando…' : 'Copiar línea'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {borrarLinea && (
+        <div className="form-layer">
+          <div className="form-card mini-card">
+            <div className="form-head">
+              <h3>Eliminar línea</h3>
+              <button className="x" onClick={() => setBorrarLinea(null)}>✕</button>
+            </div>
+            <p className="set-hint">
+              ¿Eliminar <b>{borrarLinea.nombre}</b>?<br /><br />
+              Se borran su trama y sus conexiones. <b>Los equipos no se eliminan</b> y las paradas
+              históricas se conservan, pero dejan de figurar en esa línea.
+            </p>
+            <div className="form-foot">
+              <button className="ghost" onClick={() => setBorrarLinea(null)}>Cancelar</button>
+              <button className="btn-danger" onClick={eliminarLinea}>Sí, eliminar</button>
             </div>
           </div>
         </div>

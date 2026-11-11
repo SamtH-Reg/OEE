@@ -26,6 +26,7 @@ export const api = {
   crearLinea: (b) => req('/api/lineas', { method: 'POST', body: JSON.stringify(b) }),
   editarLinea: (id, b) => req(`/api/lineas/${id}`, { method: 'PUT', body: JSON.stringify(b) }),
   copiarLinea: (id, b) => req(`/api/lineas/${id}/copiar`, { method: 'POST', body: JSON.stringify(b) }),
+  eliminarLinea: (id) => req(`/api/lineas/${id}`, { method: 'DELETE' }),
   crearMaquina: (b) => req('/api/maquinas', { method: 'POST', body: JSON.stringify(b) }),
   editarMaquina: (id, b) => req(`/api/maquinas/${id}`, { method: 'PUT', body: JSON.stringify(b) }),
   crearEspecie: (b) => req('/api/especies', { method: 'POST', body: JSON.stringify(b) }),

@@ -559,6 +559,27 @@ app.put('/api/areas/:id', async (req, reply) => {
   }
 });
 
+// Eliminar una línea: se borran trama y conexiones; las paradas históricas
+// quedan sin línea (la máquina sigue existiendo).
+app.delete('/api/lineas/:id', async (req, reply) => {
+  const id = Number(req.params.id);
+  const client = await pool.connect();
+  try {
+    await client.query('begin');
+    await client.query('delete from linea_conexiones where linea_id = $1', [id]);
+    await client.query('delete from linea_maquinas where linea_id = $1', [id]);
+    const r = await client.query('delete from lineas where id = $1 returning id', [id]);
+    await client.query('commit');
+    if (!r.rowCount) return reply.code(404).send({ error: 'línea no existe' });
+    return { ok: true };
+  } catch (e) {
+    await client.query('rollback');
+    return reply.code(400).send({ error: e.message });
+  } finally {
+    client.release();
+  }
+});
+
 app.post('/api/maquinas', async (req, reply) => {
   const b = req.body || {};
   if (!b.area_id || !texto(b.nombre)) {
