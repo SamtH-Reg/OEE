@@ -307,6 +307,27 @@ export default function App() {
             }
           }
         }
+        // Conexiones de retorno (lazos): si A recibe de B y B recibe de A,
+        // la flecha de vuelta significa «cuando B se para, A también».
+        const alcanzaDesde = (o, d, visto = new Set()) => {
+          if (o === d) return true;
+          if (visto.has(o)) return false;
+          visto.add(o);
+          return edges.filter(e => e.desde_maquina_id === o)
+                      .some(e => alcanzaDesde(e.hasta_maquina_id, d, visto));
+        };
+        let cambioLazo = true, guardaLazo = 0;
+        while (cambioLazo && guardaLazo++ < 10) {
+          cambioLazo = false;
+          for (const e of edges) {
+            const esRetorno = alcanzaDesde(e.hasta_maquina_id, e.desde_maquina_id);
+            if (esRetorno && stop.has(e.desde_maquina_id) && !stop.has(e.hasta_maquina_id)) {
+              stop.add(e.hasta_maquina_id);
+              cambioLazo = true;
+            }
+          }
+        }
+
         // bajar: un bloque con varias entradas solo cae si todas cayeron
         let cambio = true, guarda = 0;
         while (cambio && guarda++ < 20) {
