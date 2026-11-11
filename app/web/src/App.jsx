@@ -389,10 +389,19 @@ export default function App() {
     setToast(null);
   }
 
+  const entradasDe = (id) => (editor?.conexiones || [])
+    .filter(c => c.hasta_maquina_id === id)
+    .map(c => c.desde_maquina_id);
+  const nombreCorto = (id) => editor?.filas.find(f => f.maquina_id === id)?.nombre_corto || '?';
+
   // Cada equipo cae en una columna segun cuantos saltos lo separan del inicio
   // (siguiendo las conexiones «entra de»).
   function conNiveles(filas, cons) {
     const porId = new Map(filas.map(f => [f.maquina_id, f]));
+    // Línea sin conexiones todavía: se mantiene el orden guardado
+    if (!cons || cons.length === 0) {
+      return filas.map(f => ({ ...f, posicion: f.posicion || 1, rama: f.rama || 1 }));
+    }
     const entradas = new Map();
     for (const c of (cons || [])) {
       if (!entradas.has(c.hasta_maquina_id)) entradas.set(c.hasta_maquina_id, []);

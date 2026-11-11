@@ -646,9 +646,10 @@ header{
 }
 .tf-cuello input{width:18px;height:18px;accent-color:var(--amber)}
 .tf-actions{display:flex;gap:6px}
+.tf-actions{justify-content:flex-end}
 .tf-actions button{
-  flex:1;height:42px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);
-  color:var(--ink);cursor:pointer;font-size:15px;
+  width:44px;height:38px;border-radius:10px;border:1px solid var(--line);background:var(--panel2);
+  color:var(--ink);cursor:pointer;font-size:14px;
 }
 .tf-actions button:hover{background:#E7EEF6}
 .tf-actions button:disabled{opacity:.3;cursor:default}
@@ -664,10 +665,10 @@ header{
 .trama-flow::-webkit-scrollbar{height:8px}
 .trama-flow::-webkit-scrollbar-thumb{background:#CBD8E4;border-radius:4px}
 
-.tf-body{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;gap:14px}
+.tf-body{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:flex-start;gap:14px;overflow:auto;padding-top:6px}
 
 /* ---------------- trama con ramas (editor y tablero) ---------------- */
-.trama-flow{align-items:stretch;padding-top:26px}
+.trama-flow{align-items:flex-start;padding-top:26px;min-height:0}
 .tf-col{position:relative;display:flex;flex-direction:column;gap:8px;flex:0 0 auto;width:192px;margin-right:28px}
 .tf-col:last-of-type{margin-right:0}
 .tf-col::before{
@@ -726,3 +727,11 @@ header{
   height:34px;border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--muted);
   font:12.5px inherit;padding:0 8px;width:100%;
 }
+
+/* las entradas no deben estirarse */
+.tf-chips{align-items:flex-start}
+.tf-chips{align-items:flex-start}
+.tf-chip{height:22px !important;min-height:22px !important;align-self:flex-start !important;
+         display:inline-flex !important;align-items:center}
+.tf-card{min-height:0}
+.tf-col .tf-card{flex:0 0 auto}
