@@ -598,13 +598,18 @@ export default function App() {
     return filas.some(f => Math.abs((f.x || 0) - x) < ANCHO_TARJETA && Math.abs((f.y || 0) - y) < ALTO_TARJETA);
   }
 
-  function buscarHueco(filas, desdeX = 30) {
-    for (let x = desdeX; x < 6000; x += ANCHO_TARJETA + 12) {
-      for (let y = 24; y < 4000; y += ALTO_TARJETA + 12) {
-        if (!haySolape(x, y, filas)) return { x, y };
-      }
-    }
-    return { x: 30, y: 24 };
+  // La tarjeta nueva va al final del flujo: debajo de la última etapa,
+  // alineada con esa columna. Si no cabe, abre una etapa nueva a la derecha.
+  function huecoParaNueva(filas) {
+    if (!filas.length) return { x: 30, y: 24 };
+    const etapaDe = etapaVisual(filas);
+    const maxEtapa = Math.max(...filas.map(f => etapaDe(f.x)));
+    const ultima = filas.filter(f => etapaDe(f.x) === maxEtapa);
+    const x = ultima[0].x ?? 30;
+    const y = Math.max(...ultima.map(f => f.y || 0)) + ALTO_TARJETA + 12;
+    if (!haySolape(x, y, filas)) return { x, y };
+    const nuevaX = Math.max(...filas.map(f => f.x || 0)) + ANCHO_TARJETA + 24;
+    return { x: nuevaX, y: 24 };
   }
 
   // corre hacia abajo las tarjetas que se pisan, sin cambiar el orden general
@@ -804,13 +809,21 @@ export default function App() {
     if (!m) return;
     const maxPos = editor.filas.length ? Math.max(...editor.filas.map(f => f.posicion)) : 0;
     const maxX = editor.filas.length ? Math.max(...editor.filas.map(f => f.x || 0)) : 0;
-    const hueco = buscarHueco(editor.filas, maxX);
+    const hueco = huecoParaNueva(editor.filas);
     editar(filas => renum([...filas, {
       maquina_id: m.id, nombre_corto: m.nombre_corto, area: m.area,
       detiene_linea: false, posicion: maxPos + 1, rama: 1,
       x: hueco.x, y: hueco.y
     }]));
     setEditor(prev => ({ ...prev, nueva: '' }));
+    requestAnimationFrame(() => {
+      const el = document.getElementById('tr-' + m.id);
+      if (el) {
+        el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+        el.classList.add('flash');
+        setTimeout(() => el.classList.remove('flash'), 900);
+      }
+    });
   }
 
   async function guardarTrama() {
