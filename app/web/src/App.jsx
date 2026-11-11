@@ -520,6 +520,20 @@ export default function App() {
     window.addEventListener('pointerup', soltar);
   }
 
+  // franjas verticales que marcan las etapas en el lienzo
+  const guias = useMemo(() => {
+    const filas = editor?.filas || [];
+    if (!filas.length) return [];
+    const xs = [...new Set(filas.map(f => f.x ?? 0))].sort((a, b) => a - b);
+    const bandas = [];
+    for (const x of xs) {
+      const ultima = bandas[bandas.length - 1];
+      if (ultima && x - ultima.max <= 120) ultima.max = x;
+      else bandas.push({ min: x, max: x });
+    }
+    return bandas.map((b, i) => ({ n: i + 1, x: b.min }));
+  }, [editor]);
+
   // tamaño del lienzo según la tarjeta más lejana
   const lienzo = useMemo(() => {
     const filas = editor?.filas || [];
@@ -527,6 +541,36 @@ export default function App() {
     const h = Math.max(620, ...filas.map(f => (f.y || 0) + 340));
     return { w, h };
   }, [editor]);
+
+  // La etapa del tablero sale de la posición horizontal: las tarjetas que están
+  // en la misma franja de x comparten etapa, y dentro de ella se ordenan por y.
+  function etapasDesdeLienzo(filas) {
+    if (!filas.length) return filas;
+    const xs = [...new Set(filas.map(f => f.x ?? 0))].sort((a, b) => a - b);
+    const bandas = [];
+    for (const x of xs) {
+      const ultima = bandas[bandas.length - 1];
+      if (ultima && x - ultima.max <= 120) ultima.max = x;
+      else bandas.push({ min: x, max: x });
+    }
+    const etapaDe = (x) => {
+      const i = bandas.findIndex(b => x >= b.min && x <= b.max);
+      return (i < 0 ? 0 : i) + 1;
+    };
+    const conEtapa = filas.map(f => ({ ...f, posicion: etapaDe(f.x ?? 0) }));
+    const porEtapa = new Map();
+    for (const f of conEtapa) {
+      if (!porEtapa.has(f.posicion)) porEtapa.set(f.posicion, []);
+      porEtapa.get(f.posicion).push(f);
+    }
+    const rama = new Map();
+    for (const [, lista] of porEtapa) {
+      lista.sort((a, b) => (a.y ?? 0) - (b.y ?? 0)).forEach((f, i) => rama.set(f.maquina_id, i + 1));
+    }
+    return conEtapa
+      .map(f => ({ ...f, rama: rama.get(f.maquina_id) }))
+      .sort((a, b) => a.posicion - b.posicion || a.rama - b.rama);
+  }
 
   // etapas y ramas densas: 1..N, sin huecos
   function renum(lista) {
@@ -687,7 +731,7 @@ export default function App() {
   async function guardarTrama() {
     setEditor(prev => ({ ...prev, guardando: true, error: null }));
     try {
-      const orden = editor.filas;
+      const orden = etapasDesdeLienzo(editor.filas);
       await api.guardarTrama(editor.linea.linea_id,
         orden.map(f => ({
           maquina_id: f.maquina_id, detiene_linea: f.detiene_linea,
@@ -1148,6 +1192,12 @@ export default function App() {
                         fill="none" stroke="#7FB3D9" strokeWidth="2" strokeDasharray="5 4" opacity=".8" />
                 )}
               </svg>
+
+              {guias.map(g => (
+                <div className="tf-guia" key={g.n} style={{ left: g.x - 14 }}>
+                  <span className="tf-guia-h">Etapa {g.n}</span>
+                </div>
+              ))}
 
               {editor.filas.map(f => {
                 const salientes = conexionesSalidaDe(f.maquina_id).length > 0;
