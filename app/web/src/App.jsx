@@ -49,6 +49,7 @@ export default function App() {
   const [dims, setDims] = useState({ w: 0, h: 0 });
   const [cable, setCable] = useState(null);         // conexión que se está dibujando
   const [moviendo, setMoviendo] = useState(null);   // tarjeta que se arrastra
+  const [avisoEditor, setAvisoEditor] = useState(null);
   const [arrastre, setArrastre] = useState(null);   // maquina_id que se está moviendo
   const [sobre, setSobre] = useState(null);         // destino bajo el cursor
   const [toast, setToast] = useState(null);
@@ -515,6 +516,17 @@ export default function App() {
       setMoviendo(null);
       window.removeEventListener('pointermove', mover);
       window.removeEventListener('pointerup', soltar);
+      setEditor(prev => {
+        const filas = prev.filas;
+        const etapaDe = etapaVisual(filas);
+        const antes = etapaDe(ox), ahora = etapaDe(filas.find(k => k.maquina_id === f.maquina_id)?.x);
+        if (antes !== ahora) {
+          setTimeout(() => setAvisoEditor(
+            `Moviste ${f.nombre_corto} a la etapa ${ahora}. Sus conexiones se mantienen: revisá que la rama siga bien.`
+          ), 0);
+        }
+        return prev;
+      });
     };
     window.addEventListener('pointermove', mover);
     window.addEventListener('pointerup', soltar);
@@ -532,6 +544,49 @@ export default function App() {
       else bandas.push({ min: x, max: x });
     }
     return bandas.map((b, i) => ({ n: i + 1, x: b.min }));
+  }, [editor]);
+
+  function etapaVisual(filas) {
+    const xs = [...new Set(filas.map(f => f.x ?? 0))].sort((a, b) => a - b);
+    const bandas = [];
+    for (const x of xs) {
+      const ultima = bandas[bandas.length - 1];
+      if (ultima && x - ultima.max <= 120) ultima.max = x;
+      else bandas.push({ min: x, max: x });
+    }
+    return (x) => {
+      const i = bandas.findIndex(b => (x ?? 0) >= b.min && (x ?? 0) <= b.max);
+      return (i < 0 ? 0 : i) + 1;
+    };
+  }
+
+  // Tarjetas con la conexión incompleta: sueltas, sin salida o sin entrada
+  const avisos = useMemo(() => {
+    if (!editor) return [];
+    const filas = editor.filas;
+    const ids = new Set(filas.map(f => f.maquina_id));
+    const cons = (editor.conexiones || []).filter(c =>
+      ids.has(c.desde_maquina_id) && ids.has(c.hasta_maquina_id));
+    const entradas = new Map(), salidas = new Map();
+    for (const c of cons) {
+      salidas.set(c.desde_maquina_id, (salidas.get(c.desde_maquina_id) || 0) + 1);
+      entradas.set(c.hasta_maquina_id, (entradas.get(c.hasta_maquina_id) || 0) + 1);
+    }
+    const etapaDe = etapaVisual(filas);
+    const out = [];
+    for (const f of filas) {
+      const e = entradas.get(f.maquina_id) || 0;
+      const sal = salidas.get(f.maquina_id) || 0;
+      const etapa = etapaDe(f.x);
+      if (!e && !sal) {
+        out.push({ id: f.maquina_id, tipo: 'suelta', texto: `${f.nombre_corto}: sin conexiones` });
+      } else if (!sal && filas.length > 1) {
+        out.push({ id: f.maquina_id, tipo: 'sin_salida', texto: `${f.nombre_corto}: no alimenta a ningún bloque` });
+      } else if (!e && etapa > 1) {
+        out.push({ id: f.maquina_id, tipo: 'sin_entrada', texto: `${f.nombre_corto}: está en la etapa ${etapa} y no recibe de nadie` });
+      }
+    }
+    return out;
   }, [editor]);
 
   // tamaño del lienzo según la tarjeta más lejana
@@ -1177,6 +1232,17 @@ export default function App() {
           </div>
 
           <div className="tf-body">
+            {(avisos.length > 0 || avisoEditor) && (
+              <div className="tf-avisos">
+                {avisos.length > 0 && (
+                  <>
+                    <b>{avisos.length} bloque(s) con la conexión incompleta</b>
+                    <span>{avisos.map(a => a.texto).join(' · ')}</span>
+                  </>
+                )}
+                {avisoEditor && <span className="tf-aviso-mov">{avisoEditor}</span>}
+              </div>
+            )}
             <div className="tf-canvas" ref={flowRef} style={{ width: lienzo.w, height: lienzo.h }}>
               <svg className="tf-links" width={dims.w} height={dims.h}
                    viewBox={`0 0 ${Math.max(dims.w, 1)} ${Math.max(dims.h, 1)}`}>
@@ -1224,6 +1290,9 @@ export default function App() {
                       <div className="tf-head">
                         <span className="tf-etapa">Rama {f.rama}</span>
                         {f.detiene_linea && <span className="tf-tag">cuello</span>}
+                        {avisos.some(a => a.id === f.maquina_id) && (
+                          <span className="tf-warn" title="Conexión incompleta">!</span>
+                        )}
                       </div>
 
                       <b className="tf-name">{f.nombre_corto}</b>
