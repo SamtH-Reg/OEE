@@ -61,7 +61,7 @@ app.get('/api/catalogo', async () => {
     q(`select id, area_id, codigo, nombre, nombre_corto, criticidad
          from maquinas where activa order by area_id, orden, nombre`),
     q('select id, codigo, nombre, icono, color from categorias_falla where activa order by orden'),
-    q(`select id, categoria_id, codigo, descripcion, es_planificada, requiere_comentario
+    q(`select id, categoria_id, codigo, descripcion, es_planificada, requiere_comentario, direccion
          from codigos_causa where activo order by categoria_id, descripcion`),
     q(`select t.id, t.fecha, t.nombre, t.supervisor
          from turnos t where t.id = fn_turno_para(now())`),
@@ -324,7 +324,7 @@ app.get('/api/settings', async () => {
     q('select id, codigo, nombre, especie_id, activo from productos order by nombre'),
     q('select * from v_recetas'),
     q('select receta_id, maquina_id, porcentaje from receta_maquinas'),
-    q('select id, codigo, categoria_id, descripcion, es_planificada, activo from codigos_causa order by categoria_id, descripcion'),
+    q('select id, codigo, categoria_id, descripcion, es_planificada, activo, direccion from codigos_causa order by categoria_id, descripcion'),
     q('select id, codigo, nombre, icono, orden from categorias_falla where activa order by orden'),
     q('select maquina_id, codigo_causa_id from maquina_causas'),
     q('select * from v_receta_etapas')
@@ -684,6 +684,26 @@ app.delete('/api/maquinas/:id', async (req, reply) => {
     return reply.code(400).send({ error: e.message });
   } finally {
     client.release();
+  }
+});
+
+// Editar una falla del catálogo (descripción, planificada, dirección)
+app.put('/api/causas/:id', async (req, reply) => {
+  const b = req.body || {};
+  try {
+    const r = await q(
+      `update codigos_causa
+          set descripcion = coalesce($2, descripcion),
+              es_planificada = coalesce($3, es_planificada),
+              direccion = coalesce($4, direccion),
+              activo = coalesce($5, activo)
+        where id = $1 returning *`,
+      [req.params.id, texto(b.descripcion, 120), b.es_planificada ?? null,
+       b.direccion ?? null, b.activo ?? null]);
+    if (!r.rowCount) return reply.code(404).send({ error: 'falla no existe' });
+    return r.rows[0];
+  } catch (e) {
+    return reply.code(400).send({ error: e.message });
   }
 });
 

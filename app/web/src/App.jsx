@@ -279,25 +279,58 @@ export default function App() {
       for (const m of maquinasLinea) stop.add(m.id);
     } else {
       const edges = (conexiones || []).filter(c => c.linea_id === lineaActual.linea_id);
-      let cambio = true, guarda = 0;
-      while (cambio && guarda++ < 20) {
-        cambio = false;
-        for (const m of maquinasLinea) {
-          if (stop.has(m.id)) continue;
-          const padres = edges.filter(e => e.hasta_maquina_id === m.id).map(e => e.desde_maquina_id);
-          if (padres.length && padres.every(p => stop.has(p))) {
-            stop.add(m.id);
-            cambio = true;
+
+      // Dirección según la causa: una limpieza por acumulación también detiene
+      // lo que alimenta a ese bloque (aguas arriba).
+      const dirPorCausa = new Map((cat?.causas || []).map(c => [c.descripcion, c.direccion || 'abajo']));
+      const arriba = new Set();
+      let detenerTodo = false;
+      for (const m of maquinasLinea) {
+        if (!stop.has(m.id)) continue;
+        const dir = dirPorCausa.get(estadoDe(m).p?.causa) || 'abajo';
+        if (dir === 'ambas') detenerTodo = true;
+        else if (dir === 'arriba') arriba.add(m.id);
+      }
+
+      if (detenerTodo) {
+        for (const m of maquinasLinea) stop.add(m.id);
+      } else {
+        // subir por las conexiones (cualquier padre detenido arrastra)
+        const pila = [...arriba];
+        while (pila.length) {
+          const id = pila.pop();
+          for (const e of edges.filter(x => x.hasta_maquina_id === id)) {
+            if (!stop.has(e.desde_maquina_id)) {
+              stop.add(e.desde_maquina_id);
+              pila.push(e.desde_maquina_id);
+            }
+          }
+        }
+        // bajar: un bloque con varias entradas solo cae si todas cayeron
+        let cambio = true, guarda = 0;
+        while (cambio && guarda++ < 20) {
+          cambio = false;
+          for (const m of maquinasLinea) {
+            if (stop.has(m.id)) continue;
+            const padres = edges.filter(e => e.hasta_maquina_id === m.id).map(e => e.desde_maquina_id);
+            if (padres.length && padres.every(p => stop.has(p))) {
+              stop.add(m.id);
+              cambio = true;
+            }
           }
         }
       }
     }
     for (const m of maquinasLinea) {
       if (stop.has(m.id) && !propias.has(m.id)) {
-        const origen = (conexiones || [])
+        let origen = (conexiones || [])
           .filter(c => c.hasta_maquina_id === m.id)
           .map(c => maquinasLinea.find(x => x.id === c.desde_maquina_id)?.nombre_corto)
           .filter(Boolean)[0];
+        if (!origen) {
+          // arrastre aguas arriba: el origen es la máquina que se detuvo
+          origen = maquinasLinea.find(x => propias.has(x.id))?.nombre_corto;
+        }
         mapa.set(m.id, origen || 'otra etapa');
       }
     }

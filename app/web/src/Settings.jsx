@@ -342,6 +342,7 @@ export default function Settings({ onClose, onTrama, onSaved }) {
           <button className={tab === 'lineas' ? 'on' : ''} onClick={() => setTab('lineas')}>Líneas</button>
           <button className={tab === 'equipos' ? 'on' : ''} onClick={() => setTab('equipos')}>Equipos</button>
           <button className={tab === 'recetas' ? 'on' : ''} onClick={() => setTab('recetas')}>Recetas</button>
+          <button className={tab === 'fallas' ? 'on' : ''} onClick={() => setTab('fallas')}>Fallas</button>
           <button className={tab === 'datos' ? 'on' : ''} onClick={() => setTab('datos')}>Datos</button>
         </div>
         <button className="x" onClick={onClose}>✕</button>
@@ -446,6 +447,48 @@ export default function Settings({ onClose, onTrama, onSaved }) {
               La receta define especie, producto, línea, toneladas planificadas y cómo se reparte el
               flujo entre las máquinas de esa línea.
             </p>
+          </>
+        )}
+
+        {/* -------- catálogo de fallas -------- */}
+        {tab === 'fallas' && (
+          <>
+            <div className="set-bar">
+              <span className="set-count">{data.causas.length} fallas en el catálogo</span>
+            </div>
+            <p className="set-hint">
+              «Aguas abajo» detiene lo que sigue en el flujo. «Aguas arriba» también detiene lo que
+              alimenta a ese bloque (por ejemplo una limpieza por acumulación). «Ambas» detiene la rama completa.
+            </p>
+
+            {data.categorias.map(cat => {
+              const lista = data.causas.filter(c => c.categoria_id === cat.id);
+              if (!lista.length) return null;
+              return (
+                <div className="set-group" key={cat.id}>
+                  <div className="group-h">{cat.nombre} <em>{lista.length}</em></div>
+                  <div className="set-list">
+                    {lista.map(c => (
+                      <div className="set-row" key={c.id}>
+                        <div className="grow">
+                          <b>{c.descripcion}</b>
+                          <small>{c.es_planificada ? 'planificada' : 'no planificada'}</small>
+                        </div>
+                        <select className="dir-sel" value={c.direccion || 'abajo'}
+                                onChange={async e => {
+                                  await api.editarCausa(c.id, { direccion: e.target.value });
+                                  await cargar();
+                                }}>
+                          <option value="abajo">↓ aguas abajo</option>
+                          <option value="arriba">↑ aguas arriba</option>
+                          <option value="ambas">↕ ambas</option>
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
           </>
         )}
 

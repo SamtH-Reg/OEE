@@ -814,3 +814,8 @@ header{
 }
 .tf-zoom span{font:600 13px ui-monospace,monospace;color:var(--muted);min-width:46px;text-align:center}
 .tf-canvas{will-change:transform}
+
+.dir-sel{
+  height:46px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);
+  font:13.5px inherit;padding:0 10px;flex:0 0 auto;
+}
