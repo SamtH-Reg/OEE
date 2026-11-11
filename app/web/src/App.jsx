@@ -29,6 +29,7 @@ export default function App() {
   const [maqs, setMaqs] = useState([]);
   const [lineas, setLineas] = useState([]);
   const [trama, setTrama] = useState([]);
+  const [conexiones, setConexiones] = useState([]);
   const [procesos, setProcesos] = useState([]);
   const [proceso, setProceso] = useState(null);
   const [sel, setSel] = useState('todas');
@@ -70,6 +71,7 @@ export default function App() {
         setMaqs(tab.maquinas);
         setLineas(lin.lineas);
         setTrama(lin.trama);
+        setConexiones(lin.conexiones || []);
         setProcesos(proc.procesos || []);
         setSinRed(false);
         setError(null);
@@ -118,6 +120,7 @@ export default function App() {
       setMaqs(tab.maquinas);
       setLineas(lin.lineas);
       setTrama(lin.trama);
+      setConexiones(lin.conexiones || []);
       await guardarTablero({ maquinas: tab.maquinas, lineas: lin.lineas, trama: lin.trama });
     } catch { /* sin red: se mantiene lo que hay */ }
   }
@@ -243,6 +246,51 @@ export default function App() {
       .filter(Boolean);
   }, [lineaActual, trama, maqs]);
 
+  // Afectadas por propagación en la línea visible: un bloque con varias
+  // entradas solo se detiene si TODAS sus entradas están detenidas.
+  const afectadasLinea = useMemo(() => {
+    const mapa = new Map();
+    if (!lineaActual) return mapa;
+    const propias = new Set();
+    let alcanceLinea = false;
+    for (const m of maquinasLinea) {
+      const e = estadoDe(m);
+      if (e.tipo === 'stop' || e.tipo === 'plan') {
+        propias.add(m.id);
+        if (e.p.alcance === 'linea') alcanceLinea = true;
+      }
+    }
+    const stop = new Set(propias);
+    if (alcanceLinea) {
+      for (const m of maquinasLinea) stop.add(m.id);
+    } else {
+      const edges = (conexiones || []).filter(c => c.linea_id === lineaActual.linea_id);
+      let cambio = true, guarda = 0;
+      while (cambio && guarda++ < 20) {
+        cambio = false;
+        for (const m of maquinasLinea) {
+          if (stop.has(m.id)) continue;
+          const padres = edges.filter(e => e.hasta_maquina_id === m.id).map(e => e.desde_maquina_id);
+          if (padres.length && padres.every(p => stop.has(p))) {
+            stop.add(m.id);
+            cambio = true;
+          }
+        }
+      }
+    }
+    for (const m of maquinasLinea) {
+      if (stop.has(m.id) && !propias.has(m.id)) {
+        const origen = (conexiones || [])
+          .filter(c => c.hasta_maquina_id === m.id)
+          .map(c => maquinasLinea.find(x => x.id === c.desde_maquina_id)?.nombre_corto)
+          .filter(Boolean)[0];
+        mapa.set(m.id, origen || 'otra etapa');
+      }
+    }
+    return mapa;
+  }, [lineaActual, maquinasLinea, conexiones, locales, cerradas]);
+
+
   // columnas de la línea: cada etapa con sus ramas en paralelo
   const columnasLinea = useMemo(() => {
     const mapa = new Map();
@@ -341,17 +389,55 @@ export default function App() {
     setToast(null);
   }
 
-  // columnas del editor: etapa -> ramas apiladas
+  // Cada equipo cae en una columna segun cuantos saltos lo separan del inicio
+  // (siguiendo las conexiones «entra de»).
+  function conNiveles(filas, cons) {
+    const porId = new Map(filas.map(f => [f.maquina_id, f]));
+    const entradas = new Map();
+    for (const c of (cons || [])) {
+      if (!entradas.has(c.hasta_maquina_id)) entradas.set(c.hasta_maquina_id, []);
+      entradas.get(c.hasta_maquina_id).push(c.desde_maquina_id);
+    }
+    const nivel = new Map();
+    const calc = (id, visto) => {
+      if (nivel.has(id)) return nivel.get(id);
+      const ps = (entradas.get(id) || []).filter(p => porId.has(p));
+      if (!ps.length || visto.has(id)) { nivel.set(id, 0); return 0; }
+      visto.add(id);
+      const n = Math.min(Math.max(...ps.map(p => calc(p, visto))) + 1, 12);
+      nivel.set(id, n);
+      return n;
+    };
+    for (const f of filas) calc(f.maquina_id, new Set());
+
+    const porNivel = new Map();
+    for (const f of filas) {
+      const n = nivel.get(f.maquina_id);
+      if (!porNivel.has(n)) porNivel.set(n, []);
+      porNivel.get(n).push(f);
+    }
+    const rama = new Map();
+    for (const [, lista] of porNivel) {
+      lista.sort((a, b) => a.rama - b.rama).forEach((f, i) => rama.set(f.maquina_id, i + 1));
+    }
+    return filas.map(f => ({
+      ...f,
+      posicion: nivel.get(f.maquina_id) + 1,
+      rama: rama.get(f.maquina_id)
+    }));
+  }
+
   const columnasEditor = useMemo(() => {
     if (!editor) return [];
+    const filas = conNiveles(editor.filas, editor.conexiones);
     const mapa = new Map();
-    for (const f of editor.filas) {
+    for (const f of filas) {
       if (!mapa.has(f.posicion)) mapa.set(f.posicion, []);
       mapa.get(f.posicion).push(f);
     }
     return [...mapa.entries()]
       .sort((a, b) => a[0] - b[0])
-      .map(([pos, filas]) => ({ pos, filas: filas.sort((x, y) => x.rama - y.rama) }));
+      .map(([pos, lista]) => ({ pos, filas: lista.sort((x, y) => x.rama - y.rama) }));
   }, [editor]);
 
   // ---- editor de trama ----
@@ -367,7 +453,11 @@ export default function App() {
         area: t.area, detiene_linea: t.detiene_linea,
         posicion: t.posicion, rama: t.rama || 1
       }));
-    setEditor({ linea: { ...linea, linea_id: lineaId }, filas, nueva: '', error: null, guardando: false });
+    const cons = (conexiones || [])
+      .filter(c => c.linea_id === lineaId)
+      .map(c => ({ desde_maquina_id: c.desde_maquina_id, hasta_maquina_id: c.hasta_maquina_id }));
+    setEditor({ linea: { ...linea, linea_id: lineaId }, filas, conexiones: cons,
+                nueva: '', error: null, guardando: false });
   }
 
   function editar(fn) {
@@ -442,15 +532,9 @@ export default function App() {
   };
 
   // ---- arrastrar y soltar (mouse) ----
-  function soltarEnCard(dragId, destinoId, despues) {
+  function soltarEnCard(dragId, destinoId) {
     if (!dragId || dragId === destinoId) return;
-    editar(filas => {
-      const dest = filas.find(f => f.maquina_id === destinoId);
-      if (!dest) return filas;
-      const rama = dest.rama + (despues ? 0.5 : -0.5);
-      return renum(filas.map(f =>
-        f.maquina_id === dragId ? { ...f, posicion: dest.posicion, rama } : f));
-    });
+    setEntrada(dragId, destinoId, true);   // la arrastrada recibe de la destino
     setSobre(null);
     setArrastre(null);
     enfocar(dragId);
@@ -469,18 +553,43 @@ export default function App() {
   }
 
   function soltarEnNuevaEtapa(dragId) {
-    if (!dragId) return;
-    editar(filas => {
-      const max = Math.max(...filas.map(f => f.posicion));
-      return renum(filas.map(f =>
-        f.maquina_id === dragId ? { ...f, posicion: max + 1, rama: 1 } : f));
-    });
+    if (!dragId) return;   // queda como inicio de línea
     setSobre(null);
     setArrastre(null);
     enfocar(dragId);
   }
 
-  const quitar = (maquinaId) => editar(filas => renum(filas.filter(f => f.maquina_id !== maquinaId)));
+  function setEntrada(maquinaId, desdeId, agregar) {
+    if (!editor || !desdeId) return;
+    if (agregar && desdeId === maquinaId) return;
+    setEditor(prev => {
+      let cons = [...(prev.conexiones || [])];
+      if (agregar) {
+        // evitar ciclos: desdeId no puede colgar de maquinaId
+        const alcanza = (origen, destino, visto = new Set()) => {
+          if (origen === destino) return true;
+          if (visto.has(origen)) return false;
+          visto.add(origen);
+          return cons.filter(c => c.desde_maquina_id === origen)
+                      .some(c => alcanza(c.hasta_maquina_id, destino, visto));
+        };
+        if (alcanza(maquinaId, desdeId)) return prev;
+        if (!cons.some(c => c.desde_maquina_id === desdeId && c.hasta_maquina_id === maquinaId)) {
+          cons.push({ desde_maquina_id: desdeId, hasta_maquina_id: maquinaId });
+        }
+      } else {
+        cons = cons.filter(c => !(c.desde_maquina_id === desdeId && c.hasta_maquina_id === maquinaId));
+      }
+      return { ...prev, conexiones: cons };
+    });
+  }
+
+  const quitar = (maquinaId) => setEditor(prev => ({
+    ...prev,
+    filas: prev.filas.filter(f => f.maquina_id !== maquinaId),
+    conexiones: (prev.conexiones || []).filter(c =>
+      c.desde_maquina_id !== maquinaId && c.hasta_maquina_id !== maquinaId)
+  }));
 
   const marcarCuello = (maquinaId) =>
     editar(filas => filas.map(f => ({ ...f, detiene_linea: f.maquina_id === maquinaId })));
@@ -501,14 +610,19 @@ export default function App() {
   async function guardarTrama() {
     setEditor(prev => ({ ...prev, guardando: true, error: null }));
     try {
-      await api.guardarTrama(editor.linea.linea_id, editor.filas.map(f => ({
-        maquina_id: f.maquina_id, detiene_linea: f.detiene_linea,
-        posicion: f.posicion, rama: f.rama
-      })));
+      const orden = conNiveles(editor.filas, editor.conexiones);
+      await api.guardarTrama(editor.linea.linea_id,
+        orden.map(f => ({
+          maquina_id: f.maquina_id, detiene_linea: f.detiene_linea,
+          posicion: f.posicion, rama: f.rama
+        })),
+        editor.conexiones || []
+      );
       const [tab, lin] = await Promise.all([api.tablero(), api.lineas()]);
       setMaqs(tab.maquinas);
       setLineas(lin.lineas);
       setTrama(lin.trama);
+      setConexiones(lin.conexiones || []);
       await guardarTablero({ maquinas: tab.maquinas, lineas: lin.lineas, trama: lin.trama });
       setEditor(null);
       setToast({ titulo: 'Trama guardada', detalle: `${editor.linea.nombre} · ${editor.filas.length} máquinas` });
@@ -524,8 +638,13 @@ export default function App() {
   }, [editor, maqs]);
 
   // ---- render ----
-  function Tile({ m, conPosicion }) {
-    const est = estadoDe(m);
+  function Tile({ m, conPosicion, forzar }) {
+    let est = estadoDe(m);
+    if (forzar === 'run' && est.tipo === 'cascada') {
+      est = { tipo: 'run' };
+    } else if (forzar && forzar !== 'run' && est.tipo === 'run') {
+      est = { tipo: 'cascada', propia: false, p: { causa: '', origen: forzar } };
+    }
     const texto = est.tipo === 'run'
       ? '▶ Operando'
       : est.tipo === 'cascada'
@@ -717,7 +836,13 @@ export default function App() {
                   <div className={`flow-col ${col.filas.length > 1 ? 'multi' : ''}`} key={col.pos}>
                     <span className="flow-etapa">Etapa {col.pos}</span>
                     <div className="flow-stack">
-                      {col.filas.map(m => <Tile key={m.id} m={m} />)}
+                      {col.filas.map(m => {
+                        const base = estadoDe(m).tipo;
+                        const forzar = afectadasLinea.has(m.id)
+                          ? afectadasLinea.get(m.id)
+                          : (base === 'cascada' ? 'run' : undefined);
+                        return <Tile key={m.id} m={m} forzar={forzar} />;
+                      })}
                     </div>
                     {ci < columnasLinea.length - 1 && <span className="arrow">→</span>}
                   </div>
@@ -850,17 +975,10 @@ export default function App() {
           <div className="tf-body">
           <div className="trama-flow">
             {columnasEditor.map((col, ci) => (
-              <div className={`tf-col ${col.filas.length > 1 ? 'multi' : ''} ${sobre === 'col:' + col.pos ? 'drop-zone' : ''}`}
-                   key={col.pos}>
+              <div className={`tf-col ${col.filas.length > 1 ? 'multi' : ''}`} key={col.pos}>
                 <span className="tf-etapa-h">Etapa {col.pos}</span>
 
-                <div className="tf-stack"
-                     onDragOver={e => { e.preventDefault(); setSobre('col:' + col.pos); }}
-                     onDrop={e => {
-                       e.preventDefault();
-                       const id = Number(e.dataTransfer.getData('text/plain'));
-                       soltarEnEtapa(id, col.pos);
-                     }}>
+                <div className="tf-stack">
                   {col.filas.map(f => (
                     <div className={`tf-card ${f.detiene_linea ? 'is-cuello' : ''}
                                      ${arrastre === f.maquina_id ? 'dragging' : ''}
@@ -879,7 +997,7 @@ export default function App() {
                            e.stopPropagation();
                            const id = Number(e.dataTransfer.getData('text/plain'));
                            const r = e.currentTarget.getBoundingClientRect();
-                           soltarEnCard(id, f.maquina_id, e.clientY > r.top + r.height / 2);
+                           soltarEnCard(id, f.maquina_id);
                          }}>
                       <div className="tf-head">
                         <span className="tf-etapa">Rama {f.rama}</span>
@@ -889,6 +1007,31 @@ export default function App() {
                       <b className="tf-name">{f.nombre_corto}</b>
                       <span className="tf-area">{f.area}</span>
 
+                      <div className="tf-padre">
+                        <span className="tf-padre-h">Entradas</span>
+                        <div className="tf-chips">
+                          {entradasDe(f.maquina_id).length === 0 && (
+                            <span className="tf-chip empty">inicio de línea</span>
+                          )}
+                          {entradasDe(f.maquina_id).map(p => (
+                            <span className="tf-chip" key={p}>
+                              {nombreCorto(p)}
+                              <button onClick={() => setEntrada(f.maquina_id, p, false)} title="Quitar entrada">✕</button>
+                            </span>
+                          ))}
+                        </div>
+                        <select value=""
+                                onChange={e => {
+                                  if (e.target.value) setEntrada(f.maquina_id, Number(e.target.value), true);
+                                  e.currentTarget.value = '';
+                                }}>
+                          <option value="">＋ conectar entrada…</option>
+                          {editor.filas
+                            .filter(x => x.maquina_id !== f.maquina_id)
+                            .map(x => <option key={x.maquina_id} value={x.maquina_id}>{x.nombre_corto}</option>)}
+                        </select>
+                      </div>
+
                       <label className="tf-cuello">
                         <input type="radio" name="cuello" checked={f.detiene_linea}
                                onChange={() => marcarCuello(f.maquina_id)} />
@@ -896,10 +1039,6 @@ export default function App() {
                       </label>
 
                       <div className="tf-actions">
-                        <button onClick={() => moverRama(f.maquina_id, -1)} title="Subir dentro de la etapa">↑</button>
-                        <button onClick={() => moverRama(f.maquina_id, 1)} title="Bajar dentro de la etapa">↓</button>
-                        <button onClick={() => moverEtapa(f.maquina_id, -1)} title="Etapa anterior">←</button>
-                        <button onClick={() => moverEtapa(f.maquina_id, 1)} title="Etapa siguiente">→</button>
                         <button className="danger" onClick={() => quitar(f.maquina_id)} title="Quitar">✕</button>
                       </div>
                     </div>

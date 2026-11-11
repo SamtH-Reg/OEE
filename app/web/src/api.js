@@ -16,8 +16,11 @@ export const api = {
   catalogo: () => req('/api/catalogo'),
   tablero: () => req('/api/tablero'),
   lineas: () => req('/api/lineas'),
-  guardarTrama: (lineaId, maquinas) =>
-    req(`/api/lineas/${lineaId}/trama`, { method: 'PUT', body: JSON.stringify({ maquinas }) }),
+  guardarTrama: (lineaId, maquinas, conexiones) =>
+    req(`/api/lineas/${lineaId}/trama`, {
+      method: 'PUT',
+      body: JSON.stringify({ maquinas, conexiones: conexiones || [] })
+    }),
   sync: (body) => req('/api/sync', { method: 'POST', body: JSON.stringify(body) }),
   settings: () => req('/api/settings'),
   crearLinea: (b) => req('/api/lineas', { method: 'POST', body: JSON.stringify(b) }),

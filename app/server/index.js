@@ -79,7 +79,8 @@ app.get('/api/lineas', async () => {
          join areas a on a.id = m.area_id
         order by lm.linea_id, lm.posicion, lm.rama`)
   ]);
-  return { lineas: lineas.rows, trama: trama.rows };
+  const conexiones = await q('select linea_id, desde_maquina_id, hasta_maquina_id from linea_conexiones');
+  return { lineas: lineas.rows, trama: trama.rows, conexiones: conexiones.rows };
 });
 
 // Reemplaza la trama completa de una línea (orden + cuello de botella).
@@ -113,6 +114,16 @@ app.put('/api/lineas/:id/trama', async (req, reply) => {
          Boolean(maquinas[i].detiene_linea)]
       );
     }
+    // conexiones entre bloques (quién alimenta a quién)
+    await client.query('delete from linea_conexiones where linea_id = $1', [lineaId]);
+    for (const c of (req.body.conexiones || [])) {
+      if (!c.desde_maquina_id || !c.hasta_maquina_id) continue;
+      await client.query(
+        `insert into linea_conexiones (linea_id, desde_maquina_id, hasta_maquina_id)
+         values ($1, $2, $3) on conflict do nothing`,
+        [lineaId, c.desde_maquina_id, c.hasta_maquina_id]);
+    }
+
     await client.query('commit');
   } catch (e) {
     await client.query('rollback');
@@ -281,7 +292,7 @@ app.get('/api/historial', async (req) => {
 // ---------------- administración (ajustes) ----------------
 app.get('/api/settings', async () => {
   const [areas, maquinas, lineas, trama, especies, productos, recetas, distribucion,
-         causas, categorias, maquinaCausas, etapas] = await Promise.all([
+         causas, categorias, maquinaCausas, etapas, conexiones] = await Promise.all([
     q('select id, codigo, nombre, orden, activa from areas order by orden, nombre'),
     q(`select m.id, m.area_id, m.codigo, m.nombre, m.nombre_corto, m.criticidad, m.activa,
               (select count(*) from registro_paradas p where p.maquina_id = m.id)::int as paradas
@@ -294,6 +305,7 @@ app.get('/api/settings', async () => {
         order by l.orden, l.codigo`),
     q(`select linea_id, maquina_id, posicion, rama, detiene_linea
          from linea_maquinas order by linea_id, posicion, rama`),
+    q('select linea_id, desde_maquina_id, hasta_maquina_id from linea_conexiones'),
     q('select id, codigo, nombre, activa from especies order by nombre'),
     q('select id, codigo, nombre, especie_id, activo from productos order by nombre'),
     q('select * from v_recetas'),
@@ -308,7 +320,7 @@ app.get('/api/settings', async () => {
     especies: especies.rows, productos: productos.rows,
     recetas: recetas.rows, distribucion: distribucion.rows,
     causas: causas.rows, categorias: categorias.rows, maquina_causas: maquinaCausas.rows,
-    etapas: etapas.rows
+    etapas: etapas.rows, conexiones: conexiones.rows
   };
 });
 
@@ -405,6 +417,18 @@ app.post('/api/lineas/:id/copiar', async (req, reply) => {
         `insert into linea_maquinas (linea_id, maquina_id, posicion, rama, detiene_linea)
          values ($1, $2, $3, $4, $5)`,
         [lineaId, maquinaId, t.posicion, t.rama || 1, t.detiene_linea]);
+    }
+
+    // las conexiones se copian apuntando a los equipos nuevos
+    const cons = await client.query(
+      'select desde_maquina_id, hasta_maquina_id from linea_conexiones where linea_id = $1', [id]);
+    for (const c of cons.rows) {
+      const desde = mapa.get(c.desde_maquina_id);
+      const hasta = mapa.get(c.hasta_maquina_id);
+      if (!desde || !hasta) continue;
+      await client.query(
+        `insert into linea_conexiones (linea_id, desde_maquina_id, hasta_maquina_id)
+         values ($1, $2, $3) on conflict do nothing`, [lineaId, desde, hasta]);
     }
 
     let recetas = 0;
