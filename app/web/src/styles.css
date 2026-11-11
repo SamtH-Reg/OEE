@@ -823,3 +823,7 @@ header{
 /* puerto de salida extra a la izquierda: permite conectar hacia atrás */
 .tf-port.out.izq{left:-8px;right:auto;top:68%;cursor:crosshair}
 .tf-port.in{top:46%}
+
+.tf-avisos.modo{background:#E8F2FB;border-bottom-color:#C9DEF1}
+.tf-avisos.modo b,.tf-avisos.modo span{color:#1A5A8F}
+.tf-port{cursor:crosshair}

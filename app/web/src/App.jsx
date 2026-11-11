@@ -50,6 +50,7 @@ export default function App() {
   const [cable, setCable] = useState(null);         // conexión que se está dibujando
   const [moviendo, setMoviendo] = useState(null);   // tarjeta que se arrastra
   const [avisoEditor, setAvisoEditor] = useState(null);
+  const [modoConexion, setModoConexion] = useState(null);   // origen esperando destino
   const [zoom, setZoom] = useState(1);
   const [arrastre, setArrastre] = useState(null);   // maquina_id que se está moviendo
   const [sobre, setSobre] = useState(null);         // destino bajo el cursor
@@ -801,21 +802,31 @@ export default function App() {
     enfocar(dragId);
   }
 
+  function intentarConectar(destinoId, origenId) {
+    if (!editor || !origenId || destinoId === origenId) return false;
+    const cons = editor.conexiones || [];
+    const alcanza = (o, d, visto = new Set()) => {
+      if (o === d) return true;
+      if (visto.has(o)) return false;
+      visto.add(o);
+      return cons.filter(c => c.desde_maquina_id === o)
+                 .some(c => alcanza(c.hasta_maquina_id, d, visto));
+    };
+    const enLazo = alcanza(destinoId, origenId);
+    setEntrada(destinoId, origenId, true);
+    setAvisoEditor(enLazo
+      ? `Conexión en lazo: ${nombreCorto(origenId)} → ${nombreCorto(destinoId)}. ` +
+        'La parada se propaga igual, pero revisá si es lo que querés.'
+      : null);
+    return true;
+  }
+
   function setEntrada(maquinaId, desdeId, agregar) {
     if (!editor || !desdeId) return;
     if (agregar && desdeId === maquinaId) return;
     setEditor(prev => {
       let cons = [...(prev.conexiones || [])];
       if (agregar) {
-        // evitar ciclos: desdeId no puede colgar de maquinaId
-        const alcanza = (origen, destino, visto = new Set()) => {
-          if (origen === destino) return true;
-          if (visto.has(origen)) return false;
-          visto.add(origen);
-          return cons.filter(c => c.desde_maquina_id === origen)
-                      .some(c => alcanza(c.hasta_maquina_id, destino, visto));
-        };
-        if (alcanza(maquinaId, desdeId)) return prev;
         if (!cons.some(c => c.desde_maquina_id === desdeId && c.hasta_maquina_id === maquinaId)) {
           cons.push({ desde_maquina_id: desdeId, hasta_maquina_id: maquinaId });
         }
@@ -965,7 +976,9 @@ export default function App() {
       const card = el && el.closest ? el.closest('.tf-card') : null;
       if (card) {
         const destino = Number(card.id.replace('tr-', ''));
-        if (destino && destino !== cable.desde) setEntrada(destino, cable.desde, true);
+        if (destino && destino !== cable.desde) intentarConectar(destino, cable.desde);
+      } else {
+        setAvisoEditor('Soltaste fuera de una tarjeta: la conexión no se creó.');
       }
       setCable(null);
     };
@@ -1313,6 +1326,12 @@ export default function App() {
           </div>
 
           <div className="tf-body">
+            {modoConexion && (
+              <div className="tf-avisos modo">
+                <b>Conectando desde {nombreCorto(modoConexion)}</b>
+                <span>Tocá la tarjeta que debe recibir de este bloque (o arrastrá desde un punto de salida).</span>
+              </div>
+            )}
             {(avisos.length > 0 || avisoEditor) && (
               <div className="tf-avisos">
                 {avisos.length > 0 && (
@@ -1365,20 +1384,28 @@ export default function App() {
                            ? `0 0 0 1px ${colorFuente(f.maquina_id)}33, 0 8px 20px -14px rgba(15,27,39,.5)`
                            : undefined
                        }}
-                       onPointerDown={e => iniciarMover(e, f)}>
+                       onPointerDown={e => iniciarMover(e, f)}
+                       onClick={() => {
+                         if (modoConexion && modoConexion !== f.maquina_id) {
+                           intentarConectar(f.maquina_id, modoConexion);
+                           setModoConexion(null);
+                         }
+                       }}>
                       <span className="tf-port in" title="Entrada" />
                       <span className={`tf-port out izq ${conexionesSalidaDe(f.maquina_id).length ? 'activo' : ''}`}
                             title="Arrastrá para conectar hacia atrás"
                             style={conexionesSalidaDe(f.maquina_id).length
                               ? { borderColor: colorFuente(f.maquina_id), background: colorFuente(f.maquina_id) }
                               : undefined}
-                            onPointerDown={e => iniciarCable(e, f.maquina_id, 'izq')} />
+                            onPointerDown={e => iniciarCable(e, f.maquina_id, 'izq')}
+                            onClick={() => setModoConexion(f.maquina_id)} />
                       <span className={`tf-port out ${conexionesSalidaDe(f.maquina_id).length ? 'activo' : ''}`}
                             title="Arrastrá para conectar"
                             style={conexionesSalidaDe(f.maquina_id).length
                               ? { borderColor: colorFuente(f.maquina_id), background: colorFuente(f.maquina_id) }
                               : undefined}
-                            onPointerDown={e => iniciarCable(e, f.maquina_id)} />
+                            onPointerDown={e => iniciarCable(e, f.maquina_id)}
+                            onClick={() => setModoConexion(f.maquina_id)} />
 
                       <div className="tf-head">
                         <span className="tf-etapa">Rama {f.rama}</span>
@@ -1406,7 +1433,7 @@ export default function App() {
                         </div>
                         <select value=""
                                 onChange={e => {
-                                  if (e.target.value) setEntrada(f.maquina_id, Number(e.target.value), true);
+                                  if (e.target.value) intentarConectar(f.maquina_id, Number(e.target.value));
                                   e.currentTarget.value = '';
                                 }}>
                           <option value="">＋ conectar entrada…</option>
