@@ -305,8 +305,8 @@ app.get('/api/historial', async (req) => {
 
 // ---------------- administración (ajustes) ----------------
 app.get('/api/settings', async () => {
-  const [areas, maquinas, lineas, trama, especies, productos, recetas, distribucion,
-         causas, categorias, maquinaCausas, etapas, conexiones] = await Promise.all([
+  const [areas, maquinas, lineas, trama, conexiones, especies, productos, recetas, distribucion,
+         causas, categorias, maquinaCausas, etapas] = await Promise.all([
     q('select id, codigo, nombre, orden, activa from areas order by orden, nombre'),
     q(`select m.id, m.area_id, m.codigo, m.nombre, m.nombre_corto, m.criticidad, m.activa,
               (select count(*) from registro_paradas p where p.maquina_id = m.id)::int as paradas
