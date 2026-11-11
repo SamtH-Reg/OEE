@@ -744,3 +744,25 @@ header{
 /* con conexiones dibujadas, el conector gris de columna estorba */
 .trama-flow.con-links .tf-col.multi::before,
 .trama-flow.con-links .tf-col.multi::after{display:none}
+
+/* lienzo con grilla de puntos y puertos de conexión */
+.tf-body{
+  background-image:radial-gradient(#DFE7EF 1px, transparent 1px);
+  background-size:22px 22px;background-position:0 0;
+}
+.tf-card{position:relative}
+.tf-port{
+  position:absolute;top:50%;width:13px;height:13px;border-radius:50%;
+  background:#fff;border:2px solid #7FB3D9;transform:translateY(-50%);z-index:3;
+}
+.tf-port.in{left:-8px}
+.tf-port.out{right:-8px;cursor:crosshair}
+.tf-port.out:hover{background:#7FB3D9}
+.tf-port.out::after{
+  content:"";position:absolute;inset:-7px;border-radius:50%;
+}
+
+/* con conexiones dibujadas no hacen falta las flechas de columna */
+.trama-flow.con-links .tf-arrow{display:none}
+.trama-flow.con-links .tf-col.multi::before,
+.trama-flow.con-links .tf-col.multi::after{content:none}

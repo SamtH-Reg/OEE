@@ -1,7 +1,7 @@
 // Service worker mínimo: la tablet abre la app aunque no haya red.
 // Estrategia: navegación network-first (para recibir actualizaciones),
 // assets cache-first (hash en el nombre: nunca cambian).
-const CACHE = 'paradas-v3';
+const CACHE = 'paradas-v4';
 const SHELL = ['/', '/index.html', '/manifest.webmanifest'];
 
 self.addEventListener('install', (e) => {
@@ -37,11 +37,14 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
+  // online: siempre red (para no quedar con builds viejos); offline: caché
   e.respondWith(
-    caches.match(req).then(hit => hit || fetch(req).then(res => {
-      const copia = res.clone();
-      caches.open(CACHE).then(c => c.put(req, copia));
-      return res;
-    }))
+    fetch(req)
+      .then(res => {
+        const copia = res.clone();
+        caches.open(CACHE).then(c => c.put(req, copia));
+        return res;
+      })
+      .catch(() => caches.match(req))
   );
 });

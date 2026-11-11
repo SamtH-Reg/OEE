@@ -43,6 +43,7 @@ export default function App() {
   const flowRef = useRef(null);
   const [links, setLinks] = useState([]);
   const [dims, setDims] = useState({ w: 0, h: 0 });
+  const [cable, setCable] = useState(null);         // conexión que se está dibujando
   const [arrastre, setArrastre] = useState(null);   // maquina_id que se está moviendo
   const [sobre, setSobre] = useState(null);         // destino bajo el cursor
   const [toast, setToast] = useState(null);
@@ -685,6 +686,53 @@ export default function App() {
     return () => { clearTimeout(t); window.removeEventListener('resize', calc); };
   }, [editor]);
 
+  // Arrastrar desde el puerto de salida para conectar (estilo n8n)
+  function iniciarCable(e, desdeId) {
+    e.preventDefault();
+    e.stopPropagation();
+    const cont = flowRef.current;
+    if (!cont) return;
+    const base = cont.getBoundingClientRect();
+    const card = document.getElementById('tr-' + desdeId);
+    const rc = card?.getBoundingClientRect();
+    setCable({
+      desde: desdeId,
+      x1: (rc ? rc.right : e.clientX) - base.left + cont.scrollLeft,
+      y1: (rc ? rc.top + rc.height / 2 : e.clientY) - base.top + cont.scrollTop,
+      x: e.clientX - base.left + cont.scrollLeft,
+      y: e.clientY - base.top + cont.scrollTop
+    });
+  }
+
+  useEffect(() => {
+    if (!cable) return;
+    const cont = flowRef.current;
+    const mover = (e) => {
+      if (!cont) return;
+      const base = cont.getBoundingClientRect();
+      setCable(c => c && ({
+        ...c,
+        x: e.clientX - base.left + cont.scrollLeft,
+        y: e.clientY - base.top + cont.scrollTop
+      }));
+    };
+    const soltar = (e) => {
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      const card = el && el.closest ? el.closest('.tf-card') : null;
+      if (card) {
+        const destino = Number(card.id.replace('tr-', ''));
+        if (destino && destino !== cable.desde) setEntrada(destino, cable.desde, true);
+      }
+      setCable(null);
+    };
+    window.addEventListener('pointermove', mover);
+    window.addEventListener('pointerup', soltar);
+    return () => {
+      window.removeEventListener('pointermove', mover);
+      window.removeEventListener('pointerup', soltar);
+    };
+  }, [cable]);
+
   // ---- render ----
   function Tile({ m, conPosicion, forzar }) {
     let est = estadoDe(m);
@@ -1034,6 +1082,10 @@ export default function App() {
                 <path key={l.k} d={l.d} fill="none" stroke="#7FB3D9" strokeWidth="2"
                       markerEnd="url(#tf-arrow)" />
               ))}
+              {cable && (
+                <path d={`M ${cable.x1} ${cable.y1} C ${cable.x1 + 40} ${cable.y1}, ${cable.x - 40} ${cable.y}, ${cable.x} ${cable.y}`}
+                      fill="none" stroke="#7FB3D9" strokeWidth="2" strokeDasharray="5 4" opacity=".75" />
+              )}
             </svg>
 
             {columnasEditor.map((col, ci) => (
@@ -1061,6 +1113,10 @@ export default function App() {
                            const r = e.currentTarget.getBoundingClientRect();
                            soltarEnCard(id, f.maquina_id);
                          }}>
+                      <span className="tf-port in" title="Entrada" />
+                      <span className="tf-port out" title="Arrastrá para conectar"
+                            onPointerDown={e => iniciarCable(e, f.maquina_id)} />
+
                       <div className="tf-head">
                         <span className="tf-etapa">Rama {f.rama}</span>
                         {f.detiene_linea && <span className="tf-tag">cuello</span>}
