@@ -345,8 +345,9 @@ export default function App() {
     }
     for (const m of maquinasLinea) {
       if (stop.has(m.id) && !propias.has(m.id)) {
+        // el origen es la entrada que realmente está detenida
         let origen = (conexiones || [])
-          .filter(c => c.hasta_maquina_id === m.id)
+          .filter(c => c.hasta_maquina_id === m.id && stop.has(c.desde_maquina_id))
           .map(c => maquinasLinea.find(x => x.id === c.desde_maquina_id)?.nombre_corto)
           .filter(Boolean)[0];
         if (!origen) {
