@@ -265,18 +265,24 @@ export default function App() {
     if (!lineaActual) return mapa;
     const propias = new Set();
     let alcanceLinea = false;
+    // «cuello» se toma de la trama de ESTA línea (una máquina puede estar en
+    // varias líneas y ser cuello solo en una).
+    const esCuello = (id) => (trama || []).some(t =>
+      t.linea_id === lineaActual.linea_id && t.maquina_id === id && t.detiene_linea);
+
     for (const m of maquinasLinea) {
       const e = estadoDe(m);
       if (e.tipo === 'stop' || e.tipo === 'plan') {
         propias.add(m.id);
-        if (e.p.alcance === 'linea') alcanceLinea = true;
+        if (esCuello(m.id) || e.p.alcance === 'linea') alcanceLinea = true;
       }
     }
     const stop = new Set(propias);
     // Con conexiones, «detiene la línea» significa su rama (sus descendientes),
     // no toda la planta: las otras ramas siguen produciendo.
-    const hayConexiones = (conexiones || []).some(c => c.linea_id === lineaActual.linea_id);
-    if (alcanceLinea && !hayConexiones) {
+    // Un bloque marcado como cuello detiene la línea completa, tenga o no
+    // conexiones dibujadas (es el criterio del cuello).
+    if (alcanceLinea) {
       for (const m of maquinasLinea) stop.add(m.id);
     } else {
       const edges = (conexiones || []).filter(c => c.linea_id === lineaActual.linea_id);
