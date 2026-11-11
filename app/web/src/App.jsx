@@ -271,7 +271,10 @@ export default function App() {
       }
     }
     const stop = new Set(propias);
-    if (alcanceLinea) {
+    // Con conexiones, «detiene la línea» significa su rama (sus descendientes),
+    // no toda la planta: las otras ramas siguen produciendo.
+    const hayConexiones = (conexiones || []).some(c => c.linea_id === lineaActual.linea_id);
+    if (alcanceLinea && !hayConexiones) {
       for (const m of maquinasLinea) stop.add(m.id);
     } else {
       const edges = (conexiones || []).filter(c => c.linea_id === lineaActual.linea_id);
