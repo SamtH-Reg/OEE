@@ -827,3 +827,18 @@ header{
 .tf-avisos.modo{background:#E8F2FB;border-bottom-color:#C9DEF1}
 .tf-avisos.modo b,.tf-avisos.modo span{color:#1A5A8F}
 .tf-port{cursor:crosshair}
+
+/* flujo animado en las conexiones del lienzo */
+.tf-link.flujo{
+  stroke-dasharray: 7 7;
+  animation: tfFlujo 1.1s linear infinite;
+}
+@keyframes tfFlujo{ to{ stroke-dashoffset: -14; } }
+.tf-link.detenido{
+  stroke-dasharray: 2 7;
+  opacity:.55;
+  animation: tfFlujo 3.2s linear infinite;
+}
+@media (prefers-reduced-motion: reduce){
+  .tf-link.flujo,.tf-link.detenido{animation:none;stroke-dasharray:none}
+}

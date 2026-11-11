@@ -949,6 +949,7 @@ export default function App() {
           : `M ${x1} ${y1} C ${x1 - dx} ${y1}, ${x2 + dx} ${y2}, ${x2} ${y2}`;
         out.push({
           k: c.desde_maquina_id + '-' + c.hasta_maquina_id,
+          desde: c.desde_maquina_id,
           color: PALETA[fuentes.indexOf(c.desde_maquina_id) % PALETA.length],
           x1, y1, x2, y2, d
         });
@@ -1374,13 +1375,24 @@ export default function App() {
                  }}>
               <svg className="tf-links" width={dims.w} height={dims.h}
                    viewBox={`0 0 ${Math.max(dims.w, 1)} ${Math.max(dims.h, 1)}`}>
-                {links.map(l => (
-                  <g key={l.k}>
-                    <path d={l.d} fill="none" stroke={l.color} strokeWidth="2.4" opacity=".92" />
-                    <circle cx={l.x2} cy={l.y2} r="4.5" fill={l.color} />
-                    <circle cx={l.x1} cy={l.y1} r="3" fill={l.color} opacity=".9" />
-                  </g>
-                ))}
+                {links.map(l => {
+                  const m = maqs.find(x => x.id === l.desde);
+                  const enMarcha = m ? estadoDe(m).tipo === 'run' : false;
+                  return (
+                    <g key={l.k}>
+                      <path d={l.d} fill="none" stroke={l.color} strokeWidth="2.4" opacity=".25" />
+                      <path d={l.d} fill="none" stroke={l.color} strokeWidth="2.4"
+                            className={`tf-link ${enMarcha ? 'flujo' : 'detenido'}`} />
+                      {enMarcha && (
+                        <circle r="3.6" fill={l.color} opacity=".95">
+                          <animateMotion dur="2.6s" repeatCount="indefinite" path={l.d} />
+                        </circle>
+                      )}
+                      <circle cx={l.x2} cy={l.y2} r="4.5" fill={l.color} />
+                      <circle cx={l.x1} cy={l.y1} r="3" fill={l.color} opacity=".9" />
+                    </g>
+                  );
+                })}
                 {cable && (
                   <path d={`M ${cable.x1} ${cable.y1} C ${cable.x1 + 50} ${cable.y1}, ${cable.x - 50} ${cable.y}, ${cable.x} ${cable.y}`}
                         fill="none" stroke="#7FB3D9" strokeWidth="2" strokeDasharray="5 4" opacity=".8" />
