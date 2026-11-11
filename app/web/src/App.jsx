@@ -592,6 +592,32 @@ export default function App() {
     return out;
   }, [editor]);
 
+  const ANCHO_TARJETA = 262, ALTO_TARJETA = 296;
+
+  function haySolape(x, y, filas) {
+    return filas.some(f => Math.abs((f.x || 0) - x) < ANCHO_TARJETA && Math.abs((f.y || 0) - y) < ALTO_TARJETA);
+  }
+
+  function buscarHueco(filas, desdeX = 30) {
+    for (let x = desdeX; x < 6000; x += ANCHO_TARJETA + 12) {
+      for (let y = 24; y < 4000; y += ALTO_TARJETA + 12) {
+        if (!haySolape(x, y, filas)) return { x, y };
+      }
+    }
+    return { x: 30, y: 24 };
+  }
+
+  // corre hacia abajo las tarjetas que se pisan, sin cambiar el orden general
+  function acomodar(filas) {
+    const colocadas = [];
+    for (const f of [...filas].sort((a, b) => (a.x || 0) - (b.x || 0) || (a.y || 0) - (b.y || 0))) {
+      let y = f.y || 24, guarda = 0;
+      while (haySolape(f.x || 0, y, colocadas) && guarda++ < 80) y += ALTO_TARJETA + 12;
+      colocadas.push({ ...f, y });
+    }
+    return colocadas;
+  }
+
   // tamaño del lienzo según la tarjeta más lejana
   const lienzo = useMemo(() => {
     const filas = editor?.filas || [];
@@ -778,10 +804,11 @@ export default function App() {
     if (!m) return;
     const maxPos = editor.filas.length ? Math.max(...editor.filas.map(f => f.posicion)) : 0;
     const maxX = editor.filas.length ? Math.max(...editor.filas.map(f => f.x || 0)) : 0;
+    const hueco = buscarHueco(editor.filas, maxX);
     editar(filas => renum([...filas, {
       maquina_id: m.id, nombre_corto: m.nombre_corto, area: m.area,
       detiene_linea: false, posicion: maxPos + 1, rama: 1,
-      x: maxX + 330, y: 24
+      x: hueco.x, y: hueco.y
     }]));
     setEditor(prev => ({ ...prev, nueva: '' }));
   }
@@ -1349,6 +1376,8 @@ export default function App() {
               ))}
             </select>
             <button onClick={agregarMaquina} disabled={!editor.nueva}>Agregar</button>
+            <button className="btn-acomodar" title="Separa las tarjetas que se pisan"
+                    onClick={() => editar(filas => acomodar(filas))}>Acomodar</button>
           </div>
           </div>
 
