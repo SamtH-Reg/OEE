@@ -105,6 +105,8 @@ header{
   min-height:96px;box-shadow:var(--shadow);transition:border-color .15s, background .15s, transform .08s;
 }
 .line-item:hover{background:var(--panel2)}
+.line-item.compacto{min-height:74px;padding:12px 14px}
+.line-item.compacto .lname b{font-size:15px}
 .line-item:active{transform:scale(.985)}
 .line-item.on{border-color:var(--accent);background:var(--accent-bg)}
 .line-badge{

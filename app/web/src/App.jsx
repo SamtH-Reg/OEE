@@ -231,6 +231,10 @@ export default function App() {
 
   const procesoSel = procesos.find(p => p.id === procesoId) || null;
 
+  // Líneas ya guardadas en el turno (las que se pueden abrir para registrar fallas)
+  const idsTurno = procesoSel?.lineas || [];
+  const lineasTurno = idsTurno.length ? lineas.filter(l => idsTurno.includes(l.linea_id)) : [];
+
   // ¿cambió la selección respecto de lo guardado? así «Guardar» sólo se activa si hay algo que guardar
   const cambiosPendientes = useMemo(() => {
     const base = [...(procesoSel?.lineas || [])].sort((a, b) => a - b);
@@ -1142,7 +1146,7 @@ export default function App() {
             <button className={`lineas-sel ${lineasAbierto ? 'abierto' : ''}`}
                     onClick={() => setLineasAbierto(v => !v)} aria-expanded={lineasAbierto}>
               <span>
-                <b>Líneas del turno</b>
+                <b>Cambiar líneas del turno</b>
                 <small>
                   {lineasSel.length
                     ? `${lineasSel.length} de ${lineas.length} ${lineas.length === 1 ? 'línea' : 'líneas'}`
@@ -1187,6 +1191,30 @@ export default function App() {
               {cambiosPendientes ? 'Guardar cambios' : 'Guardado'}
             </button>
           </div>
+
+          {/* Las líneas ya guardadas en el turno: se toca una y se registran las fallas ahí */}
+          {lineasTurno.length > 0 && (
+            <>
+              <div className="side-h">Líneas del turno</div>
+              {lineasTurno.map(l => {
+                const st = estadoLinea(l);
+                return (
+                  <button key={l.linea_id} className={`line-item compacto ${sel === l.linea_id ? 'on' : ''}`}
+                          onClick={() => setSel(l.linea_id)}>
+                    <span className="lname">
+                      <b>{l.nombre}</b>
+                      <small>
+                        {l.maquinas} máquinas · {st.estado === 'operando' ? 'operando' : st.causa}
+                      </small>
+                    </span>
+                    <span className={`pill ${st.estado}`}>
+                      {st.estado === 'operando' ? 'OK' : st.estado === 'detenida' ? 'PARADA' : 'PARCIAL'}
+                    </span>
+                  </button>
+                );
+              })}
+            </>
+          )}
 
           {lineaActual && (
             <button className="btn-edit" onClick={abrirEditor}>
