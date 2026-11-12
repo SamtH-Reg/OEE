@@ -260,7 +260,8 @@ app.post('/api/sync', async (req, reply) => {
         hora_fin: e.hora_fin ?? null,
         impacto: e.impacto || 'Total',
         porcentaje_afectacion: e.porcentaje_afectacion ?? null,
-        comentarios_operador: e.comentario ?? null
+        comentarios_operador: e.comentario ?? null,
+        linea_id: e.linea_id ?? null
       }));
       const r = await q('select * from fn_sync_lote($1::jsonb, $2::text, $3::text)',
         [JSON.stringify(lote), req.body.dispositivo_id ?? null, req.body.usuario ?? 'tablet']);

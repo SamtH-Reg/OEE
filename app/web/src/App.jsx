@@ -230,7 +230,11 @@ export default function App() {
     if (!activas.length) return { estado: 'operando' };
 
     const origen = activas.find(x => x.e.propia) || activas[0];
-    const total = activas.some(x => x.e.p.alcance === 'linea');
+    // «parada total» sólo si se detuvo el CUELLO de ESTA línea (una máquina
+    // puede ser cuello en otra línea y no en ésta; el alcance guardado no
+    // alcanza porque se resolvió con una sola línea)
+    const total = activas.some(x => x.e.propia && trama.some(t =>
+      t.linea_id === l.linea_id && t.maquina_id === x.m.id && t.detiene_linea));
     return {
       estado: total ? 'detenida' : 'parcial',
       causa: origen.e.p.causa,
@@ -354,7 +358,7 @@ export default function App() {
       .sort((a, b) => a.posicion - b.posicion)
       .map(t => {
         const m = maqs.find(x => x.id === t.maquina_id);
-        return m ? { ...m, posicion: t.posicion, rama: t.rama || 1 } : null;
+        return m ? { ...m, posicion: t.posicion, rama: t.rama || 1, detiene_linea: t.detiene_linea } : null;
       })
       .filter(Boolean);
   }, [lineaActual, trama, maqs]);
@@ -375,7 +379,10 @@ export default function App() {
       const e = estadoDe(m);
       if (e.tipo === 'stop' || e.tipo === 'plan') {
         propias.add(m.id);
-        if (esCuello(m.id) || e.p.alcance === 'linea') alcanceLinea = true;
+        // El cuello se lee de la trama de ESTA línea: el alcance guardado en la
+        // parada se resolvió con una sola línea y una máquina puede ser cuello
+        // en otra, apagando toda la línea sin motivo.
+        if (esCuello(m.id)) alcanceLinea = true;
       }
     }
     const stop = new Set(propias);
@@ -419,9 +426,11 @@ export default function App() {
         const alcanzaDesde = (o, d, visto = new Set()) => {
           if (o === d) return true;
           if (visto.has(o)) return false;
-          visto.add(o);
+          // un `visto` compartido entre ramas poda caminos válidos: cada rama
+          // lleva su propia copia o el lazo deja de propagar según el orden
+          const siguiente = new Set(visto).add(o);
           return edges.filter(e => e.desde_maquina_id === o)
-                      .some(e => alcanzaDesde(e.hasta_maquina_id, d, visto));
+                      .some(e => alcanzaDesde(e.hasta_maquina_id, d, siguiente));
         };
         let cambioLazo = true, guardaLazo = 0;
         while (cambioLazo && guardaLazo++ < 10) {
@@ -465,7 +474,7 @@ export default function App() {
       }
     }
     return mapa;
-  }, [lineaActual, maquinasLinea, conexiones, locales, cerradas]);
+  }, [lineaActual, maquinasLinea, conexiones, locales, cerradas, trama, cat]);
 
 
   // columnas de la línea: cada etapa con sus ramas en paralelo
@@ -498,12 +507,14 @@ export default function App() {
       es_planificada: causa.es_planificada, origen_id: maq.id
     };
 
-    // pintado inmediato: la máquina y las que la línea arrastra
-    setLocales(prev => aplicarLocal(prev, maq, parada));
+    // pintado inmediato: sólo la máquina tocada. El arrastre lo calcula
+    // afectadasLinea con las CONEXIONES de la trama (por eso las flechas mandan).
+    setLocales(prev => ({ ...prev, [maq.id]: parada }));
     try {
       const evId = await encolar({
         tipo: 'abrir', uuid, maquina_id: maq.id, causa_id: causa.id,
-        hora_inicio: inicio, impacto: 'Total'
+        hora_inicio: inicio, impacto: 'Total',
+        linea_id: maq.linea_id ?? null   // el alcance se resuelve en ESTA línea
       });
       setPend(await db.outbox.count());
       setSheet(null);
@@ -516,21 +527,6 @@ export default function App() {
     } catch (e) {
       setError('No se pudo guardar el registro: ' + e.message);
     }
-  }
-
-  function aplicarLocal(prev, maq, parada) {
-    const next = { ...prev, [maq.id]: parada };
-    if (maq.linea_id && parada.alcance !== 'maquina') {
-      const enLinea = trama.filter(t => t.linea_id === maq.linea_id);
-      for (const t of enLinea) {
-        if (t.maquina_id === maq.id) continue;
-        const afectada = parada.alcance === 'linea' || t.posicion >= (maq.posicion ?? 0);
-        if (afectada && !next[t.maquina_id]) {
-          next[t.maquina_id] = { ...parada, origen_id: maq.id };
-        }
-      }
-    }
-    return next;
   }
 
   async function reanudar(maq, parada, comentario) {
@@ -636,7 +632,11 @@ export default function App() {
 
   // ---- editor de trama ----
   function abrirEditor(lineaParam) {
-    const linea = lineaParam || lineaActual;
+    // si llega el evento del onClick en vez de una línea, se usa la que se está viendo
+    const esLinea = lineaParam && typeof lineaParam === 'object'
+      && (lineaParam.linea_id != null || lineaParam.id != null)
+      && !lineaParam.nativeEvent;
+    const linea = esLinea ? lineaParam : lineaActual;
     if (!linea) return;
     const lineaId = linea.linea_id ?? linea.id;
     const filas = trama
@@ -1259,7 +1259,7 @@ export default function App() {
           )}
 
           {lineaActual && (
-            <button className="btn-edit" onClick={abrirEditor}>
+            <button className="btn-edit" onClick={() => abrirEditor()}>
               <svg viewBox="0 0 24 24">
                 <path d="M4 20h4.5L19 9.5 14.5 5 4 15.5V20Z" />
                 <path d="m13.5 6 4.5 4.5" />
