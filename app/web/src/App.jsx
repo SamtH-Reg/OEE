@@ -21,6 +21,12 @@ const ICONOS = {
   camion: 'M2 7h11v9H2z M13 10h4l4 4v2h-8z M6 18.2a1.7 1.7 0 1 0 0 .1Z M17.5 18.2a1.7 1.7 0 1 0 0 .1Z'
 };
 
+const fmtMin = (m) => {
+  const min = Math.max(0, Math.round(m || 0));
+  if (min < 60) return `${min} min`;
+  return `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, '0')}`;
+};
+
 const minutos = (desde, ahora) => {
   if (!desde) return '';
   const min = Math.max(0, Math.floor((ahora - new Date(desde).getTime()) / 60000));
@@ -35,7 +41,7 @@ export default function App() {
   const [trama, setTrama] = useState([]);
   const [conexiones, setConexiones] = useState([]);
   const [procesos, setProcesos] = useState([]);
-  const [proceso, setProceso] = useState(null);
+  const [monitor, setMonitor] = useState(null);   // paradas del turno (sólo lectura)
   const [procesoId, setProcesoId] = useState(null);
   const [lineasSel, setLineasSel] = useState([]);      // líneas del proceso del turno
   const [lineasAbierto, setLineasAbierto] = useState(false);  // desplegable de líneas del turno
@@ -144,16 +150,18 @@ export default function App() {
       setTrama(lin.trama);
       setConexiones(lin.conexiones || []);
       await guardarTablero({ maquinas: tab.maquinas, lineas: lin.lineas, trama: lin.trama });
+      api.monitor().then(setMonitor).catch(() => {});
     } catch { /* sin red: se mantiene lo que hay */ }
   }
 
+  // Monitor del turno (SÓLO LECTURA): paradas abiertas y cerradas para el gráfico
   useEffect(() => {
-    const id = typeof sel === 'string' && sel.startsWith('p:') ? Number(sel.slice(2)) : null;
-    if (!id) { setProceso(null); return; }
     let vivo = true;
-    api.proceso(id).then(p => { if (vivo) setProceso(p); }).catch(() => {});
-    return () => { vivo = false; };
-  }, [sel]);
+    const traer = () => api.monitor().then(m => { if (vivo) setMonitor(m); }).catch(() => {});
+    traer();
+    const id = setInterval(traer, 20000);
+    return () => { vivo = false; clearInterval(id); };
+  }, []);
 
   // ---- estado efectivo de cada máquina ----
   function estadoDe(m) {
@@ -286,17 +294,58 @@ export default function App() {
     ? null
     : lineas.find(l => l.linea_id === sel);
 
-  // etapas agrupadas: las «en paralelo» comparten el paso
-  const etapasAgrupadas = useMemo(() => {
-    if (!proceso) return [];
-    const grupos = [];
-    for (const e of proceso.etapas) {
-      const ultimo = grupos[grupos.length - 1];
-      if (e.paralelo && ultimo) ultimo.etapas.push(e);
-      else grupos.push({ orden: e.orden, etapas: [e] });
+  // ---- datos del monitor (sólo lectura) ----
+  const filasMonitor = lineasTurno.map(l => {
+    const st = estadoLinea(l);
+    return {
+      id: l.linea_id,
+      nombre: l.nombre,
+      maquinas: l.maquinas,
+      estado: st.estado,
+      causa: st.causa,
+      origen: st.origen,
+      tiempo: st.estado === 'operando' ? '' : minutos(st.desde, ahora)
+    };
+  });
+
+  // minutos perdidos por línea y por causa: suma de las paradas del turno
+  const perdidas = useMemo(() => {
+    const paradas = monitor?.paradas || [];
+    const dueno = new Map();          // maquina_id -> [linea_id]
+    for (const t of (trama || [])) {
+      if (!dueno.has(t.maquina_id)) dueno.set(t.maquina_id, []);
+      dueno.get(t.maquina_id).push(t.linea_id);
     }
-    return grupos;
-  }, [proceso]);
+    const ids = new Set(idsTurno);
+    const porLinea = new Map();
+    const porCausa = new Map();
+    let total = 0;
+    let abiertas = 0;
+    for (const p of paradas) {
+      total += p.minutos;
+      if (p.estado === 'activa') abiertas += 1;
+      for (const lid of (dueno.get(p.maquina_id) || [])) {
+        if (ids.size && !ids.has(lid)) continue;
+        porLinea.set(lid, (porLinea.get(lid) || 0) + p.minutos);
+      }
+      porCausa.set(p.causa, (porCausa.get(p.causa) || 0) + p.minutos);
+    }
+    const nombre = new Map(lineas.map(l => [l.linea_id, l.nombre]));
+    const aLista = (mapa, tope) => {
+      const arr = [...mapa.entries()]
+        .map(([k, min]) => ({ key: String(k), nombre: nombre.get(Number(k)) || k, min }))
+        .filter(x => x.min > 0)
+        .sort((a, b) => b.min - a.min);
+      const tope1 = arr.slice(0, tope);
+      const max = Math.max(1, ...tope1.map(x => x.min));
+      return tope1.map(x => ({ ...x, pct: Math.round((x.min / max) * 100) }));
+    };
+    return {
+      total, abiertas, n: paradas.length,
+      porLinea: aLista(porLinea, 8),
+      porCausa: aLista(porCausa, 6)
+    };
+  }, [monitor, trama, idsTurno, lineas]);
 
   const maquinasLinea = useMemo(() => {
     if (!lineaActual) return [];
@@ -1172,8 +1221,8 @@ export default function App() {
                 {!lineas.length && <div className="armado-vacio">No hay líneas cargadas</div>}
                 {procesoId && (
                   <button className="lineas-ver"
-                          onClick={() => { setSel('p:' + procesoId); setLineasAbierto(false); }}>
-                    Ver el proceso del turno
+                          onClick={() => { setSel(procesoId ? 'p:' + procesoId : 'todas'); setLineasAbierto(false); }}>
+                    Ver el tablero en vivo
                   </button>
                 )}
               </div>
@@ -1228,49 +1277,7 @@ export default function App() {
         <main className="stage">
           {!cat && <div className="aviso">Cargando catálogo de planta…</div>}
 
-          {proceso ? (
-            <>
-              <div className="line-head">
-                <b>{proceso.receta.nombre}</b>
-                <span>
-                  {[
-                    proceso.receta.especie,
-                    proceso.receta.producto,
-                    `${proceso.etapas.length} etapas`,
-                    proceso.receta.toneladas_turno ? `${Number(proceso.receta.toneladas_turno)} t/turno` : null
-                  ].filter(Boolean).join(' · ')}
-                </span>
-              </div>
-              <div className="proc-flow">
-                {etapasAgrupadas.map((g, gi) => (
-                  <div className="proc-step" key={g.orden}>
-                    <div className="proc-num">{g.orden}</div>
-                    <div className="proc-cards">
-                      {g.etapas.map(e => (
-                        <div className="proc-card" key={e.id}>
-                          <div className="proc-h">
-                            <b>{e.nombre}</b>
-                            <span>{e.tipo === 'linea' ? 'línea completa' : 'máquina'}</span>
-                          </div>
-                          <div className="proc-maquinas">
-                            {e.maquinas.map(mm => {
-                              const m = maqs.find(x => x.id === mm.id);
-                              return m ? <Tile key={m.id} m={m} /> : null;
-                            })}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    {gi < etapasAgrupadas.length - 1 && <span className="proc-arrow">→</span>}
-                  </div>
-                ))}
-              </div>
-              <p className="flow-hint">
-                Proceso seleccionado: tocá cualquier máquina para registrar la parada. Los equipos vienen
-                de las líneas y máquinas que armaste en la receta.
-              </p>
-            </>
-          ) : lineaActual ? (
+          {lineaActual ? (
             <>
               <div className={`line-head ${estadoLinea(lineaActual).estado}`}>
                 <b>{lineaActual.nombre}</b>
@@ -1281,7 +1288,7 @@ export default function App() {
                 </span>
                 {procesoId && (
                   <button className="volver-planta" onClick={() => setSel('p:' + procesoId)}>
-                    ← Proceso del turno
+                    ← Tablero en vivo
                   </button>
                 )}
               </div>
@@ -1308,17 +1315,80 @@ export default function App() {
               </p>
             </>
           ) : (
-            <div className="empty">
-              <div className="empty-mark">◫</div>
-              <h2>{maqs.length ? 'Elegí una línea' : 'La planta está vacía'}</h2>
-              <p>
-                {maqs.length
-                  ? 'Tocá una línea del turno en el panel para ver sus máquinas y registrar las fallas.'
-                  : 'Armá la primera línea con sus equipos y su receta. Toma tres pasos y queda lista para operar.'}
-              </p>
-              {!maqs.length && (
-                <button className="btn-go small" onClick={() => setAjustes(true)}>＋ Armar línea</button>
-              )}
+            <div className="monitor">
+              <div className="mon-top">
+                <div>
+                  <b>{cat?.turno ? `Turno ${cat.turno.nombre}` : 'Sin turno activo'}</b>
+                  <span>
+                    {cat?.turno?.supervisor || 'Sin supervisor'}
+                    {' · '}{lineasTurno.length} {lineasTurno.length === 1 ? 'línea' : 'líneas'}
+                    {' · '}{nf.format(maqsVisibles.length)} máquinas
+                  </span>
+                </div>
+                <div className="mon-envivo"><i /> En vivo</div>
+              </div>
+
+              <div className="mon-ahora">
+                {filasMonitor.map(f => (
+                  <div key={f.id} className={`mon-fila ${f.estado}`}>
+                    <span className="mon-nombre">{f.nombre}</span>
+                    <span className="mon-pista"><i /></span>
+                    <span className="mon-estado">
+                      <b>{f.estado === 'operando' ? 'Operando' : f.estado === 'detenida' ? 'Parada total' : 'Parada parcial'}</b>
+                      <small>
+                        {f.estado === 'operando'
+                          ? `${f.maquinas} máquinas`
+                          : `${f.causa}${f.origen ? ` · ${f.origen}` : ''} · ${f.tiempo}`}
+                      </small>
+                    </span>
+                  </div>
+                ))}
+                {!filasMonitor.length && (
+                  <div className="mon-vacio">No hay líneas en el turno. Elegilas en el panel de la izquierda.</div>
+                )}
+              </div>
+
+              <div className="mon-perdidas">
+                <div className="mon-card mon-total">
+                  <span>Tiempo perdido</span>
+                  <b>{fmtMin(perdidas.total)}</b>
+                  <small>
+                    {perdidas.n} {perdidas.n === 1 ? 'parada' : 'paradas'}
+                    {perdidas.abiertas ? ` · ${perdidas.abiertas} en curso` : ''}
+                  </small>
+                </div>
+
+                <div className="mon-card">
+                  <span>Por línea</span>
+                  {perdidas.porLinea.map(x => (
+                    <div className="mon-bar" key={x.key}>
+                      <b>{x.nombre}</b>
+                      <span className="mon-bar-pista"><i style={{ width: `${x.pct}%` }} /></span>
+                      <em>{fmtMin(x.min)}</em>
+                    </div>
+                  ))}
+                  {!perdidas.porLinea.length && <small className="mon-vacio">Sin paradas en el turno</small>}
+                </div>
+
+                <div className="mon-card">
+                  <span>Por causa</span>
+                  {perdidas.porCausa.map(x => (
+                    <div className="mon-bar" key={x.key}>
+                      <b>{x.nombre}</b>
+                      <span className="mon-bar-pista causa"><i style={{ width: `${x.pct}%` }} /></span>
+                      <em>{fmtMin(x.min)}</em>
+                    </div>
+                  ))}
+                  {!perdidas.porCausa.length && <small className="mon-vacio">Sin paradas en el turno</small>}
+                </div>
+              </div>
+
+              <div className="mon-pie">
+                Actualizado {monitor?.ahora
+                  ? new Date(monitor.ahora).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })
+                  : '—'}
+                {' · '}sólo lectura
+              </div>
             </div>
           )}
         </main>

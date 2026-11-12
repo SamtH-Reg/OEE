@@ -943,6 +943,27 @@ app.get('/api/recetas/:id/proceso', async (req, reply) => {
   return { receta: rec.rows[0], etapas: etapasResueltas };
 });
 
+// Monitor del turno: sólo lectura, para la pantalla de planta (sin escrituras)
+app.get('/api/monitor', async () => {
+  const t = await q(`select t.id, t.fecha, t.nombre, t.supervisor, r.nombre as proceso
+                       from turnos t left join recetas r on r.id = t.proceso_id
+                      where t.id = fn_turno_para(now())`);
+  const turno = t.rows[0] || null;
+  const ahora = new Date().toISOString();
+  if (!turno) return { turno: null, paradas: [], ahora };
+  const p = await q(`
+    select p.id, p.maquina_id, m.nombre_corto as maquina,
+           c.descripcion as causa, c.es_planificada, p.estado,
+           p.hora_inicio, p.hora_fin,
+           greatest(0, round(extract(epoch from (coalesce(p.hora_fin, now()) - p.hora_inicio)) / 60))::int as minutos
+      from registro_paradas p
+      join maquinas m on m.id = p.maquina_id
+      join codigos_causa c on c.id = p.codigo_causa_id
+     where p.turno_id = $1 and p.estado <> 'anulada'
+     order by p.hora_inicio desc`, [turno.id]);
+  return { turno, paradas: p.rows, ahora };
+});
+
 // Lista de procesos para el operador
 app.get('/api/procesos', async () => {
   const r = await q(`select v.id, v.codigo, v.nombre, v.especie, v.producto,

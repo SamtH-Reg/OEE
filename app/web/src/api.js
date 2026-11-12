@@ -43,6 +43,7 @@ export const api = {
   guardarEtapas: (id, etapas) => req(`/api/recetas/${id}/etapas`, { method: 'PUT', body: JSON.stringify({ etapas }) }),
   proceso: (id) => req(`/api/recetas/${id}/proceso`),
   procesos: () => req('/api/procesos'),
+  monitor: () => req('/api/monitor'),
   demo: () => req('/api/demo'),
   eliminarDemo: () => req('/api/demo/eliminar', { method: 'POST', body: JSON.stringify({ confirmar: true }) }),
   setProcesoTurno: (turnoId, procesoId) =>
