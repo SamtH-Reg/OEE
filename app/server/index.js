@@ -728,6 +728,23 @@ app.put('/api/causas/:id', async (req, reply) => {
   }
 });
 
+// Eliminar una falla del catálogo. Si ya tiene paradas registradas no se borra:
+// se desactiva para no romper el historial.
+app.delete('/api/causas/:id', async (req, reply) => {
+  const id = Number(req.params.id);
+  const uso = await q('select count(*)::int n from registro_paradas where codigo_causa_id = $1', [id]);
+  if (uso.rows[0].n > 0) {
+    await q('update codigos_causa set activo = false where id = $1', [id]);
+    return { ok: true, desactivada: true, paradas: uso.rows[0].n };
+  }
+  try {
+    await q('delete from codigos_causa where id = $1', [id]);
+    return { ok: true, desactivada: false };
+  } catch (e) {
+    return reply.code(400).send({ error: e.message });
+  }
+});
+
 // Nueva falla del catálogo (se puede crear desde el equipo).
 app.post('/api/causas', async (req, reply) => {
   const b = req.body || {};

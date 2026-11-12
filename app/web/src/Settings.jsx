@@ -24,6 +24,7 @@ export default function Settings({ onClose, onTrama, onSaved }) {
   const [confirmando, setConfirmando] = useState(false);
   const [borrando, setBorrando] = useState(false);
   const [nuevaFalla, setNuevaFalla] = useState(null);
+  const [causaEdit, setCausaEdit] = useState(null);
   const [areasEdit, setAreasEdit] = useState(null);
   const [borrar, setBorrar] = useState(null);
   const [borrarLinea, setBorrarLinea] = useState(null);
@@ -632,8 +633,35 @@ export default function Settings({ onClose, onTrama, onSaved }) {
                       Fallas posibles de este equipo
                       <em>opcional · si no marcás ninguna, el operador ve todo el catálogo</em>
                     </div>
+                    <div className="asignadas">
+                      <div className="asignadas-h">
+                        Asignadas a este equipo: {(form.valores.causas || []).length}
+                        <em>lo que ve el operador al detenerla</em>
+                      </div>
+                      {(form.valores.causas || []).length === 0 && (
+                        <p className="set-hint">Todavía no marcaste ninguna: el operador verá el catálogo completo.</p>
+                      )}
+                      {(form.valores.causas || []).map(id => {
+                        const c = data.causas.find(x => x.id === id);
+                        if (!c) return null;
+                        return (
+                          <div className="asignada-row" key={id}>
+                            <span>{c.descripcion}</span>
+                            <button type="button" className="mini" title="Editar esta falla"
+                                    onClick={() => setCausaEdit({ ...c })}>✎</button>
+                            <button type="button" className="mini" title="Quitarla de este equipo"
+                                    onClick={() => toggleCausa(id)}>✕</button>
+                          </div>
+                        );
+                      })}
+                    </div>
+
                     {data.categorias.map(cat => {
-                      const causas = data.causas.filter(c => c.categoria_id === cat.id && c.activo);
+                      const propias = form.valores.causas || [];
+                      const causas = data.causas
+                        .filter(c => c.categoria_id === cat.id && c.activo)
+                        .sort((a, b) => (propias.includes(b.id) - propias.includes(a.id)) ||
+                                        a.descripcion.localeCompare(b.descripcion));
                       if (!causas.length) return null;
                       return (
                         <div className="fallas-grupo" key={cat.id}>
@@ -771,6 +799,61 @@ export default function Settings({ onClose, onTrama, onSaved }) {
               </button>
             </div>
           </div>
+
+      {causaEdit && (
+        <div className="form-layer">
+          <div className="form-card mini-card">
+            <div className="form-head">
+              <h3>Editar falla</h3>
+              <button className="x" onClick={() => setCausaEdit(null)}>✕</button>
+            </div>
+            <p className="set-hint">
+              El cambio vale para todos los equipos que usan esta falla y para el historial nuevo.
+            </p>
+            <div className="form-grid">
+              <label className="wide">Descripción
+                <input autoFocus value={causaEdit.descripcion}
+                       onChange={e => setCausaEdit({ ...causaEdit, descripcion: e.target.value })} />
+              </label>
+              <label>Propaga
+                <select value={causaEdit.direccion || 'abajo'}
+                        onChange={e => setCausaEdit({ ...causaEdit, direccion: e.target.value })}>
+                  <option value="abajo">↓ aguas abajo</option>
+                  <option value="arriba">↑ aguas arriba</option>
+                  <option value="ambas">↕ ambas</option>
+                </select>
+              </label>
+              <label className="check">
+                <input type="checkbox" checked={!!causaEdit.es_planificada}
+                       onChange={e => setCausaEdit({ ...causaEdit, es_planificada: e.target.checked })} />
+                Planificada
+              </label>
+            </div>
+            <div className="form-foot">
+              <button className="ghost" onClick={() => setCausaEdit(null)}>Cancelar</button>
+              <button className="btn-danger" onClick={async () => {
+                const r = await api.eliminarCausa(causaEdit.id);
+                setCausaEdit(null);
+                await cargar();
+                onSaved && onSaved();
+                setAviso(r.desactivada
+                  ? 'La falla tiene paradas registradas: se desactivó en vez de borrarse.'
+                  : 'Falla eliminada del catálogo.');
+              }}>Eliminar</button>
+              <button className="btn-go small" onClick={async () => {
+                await api.editarCausa(causaEdit.id, {
+                  descripcion: causaEdit.descripcion,
+                  direccion: causaEdit.direccion,
+                  es_planificada: !!causaEdit.es_planificada
+                });
+                setCausaEdit(null);
+                await cargar();
+                onSaved && onSaved();
+              }}>Guardar</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {nuevaFalla && (
             <div className="form-card mini-card">
