@@ -63,8 +63,11 @@ app.get('/api/catalogo', async () => {
     q('select id, codigo, nombre, icono, color from categorias_falla where activa order by orden'),
     q(`select id, categoria_id, codigo, descripcion, es_planificada, requiere_comentario, direccion
          from codigos_causa where activo order by categoria_id, descripcion`),
-    q(`select t.id, t.fecha, t.nombre, t.supervisor
-         from turnos t where t.id = fn_turno_para(now())`),
+    q(`select t.id, t.fecha, t.nombre, t.supervisor, t.proceso_id,
+              r.nombre as proceso
+         from turnos t
+         left join recetas r on r.id = t.proceso_id
+        where t.id = fn_turno_para(now())`),
     q('select maquina_id, codigo_causa_id from maquina_causas'),
     q('select * from v_receta_etapas')
   ]);
@@ -929,10 +932,30 @@ app.get('/api/recetas/:id/proceso', async (req, reply) => {
 
 // Lista de procesos para el operador
 app.get('/api/procesos', async () => {
-  const r = await q(`select id, codigo, nombre, especie, producto, linea_codigo,
+  const r = await q(`select v.id, v.codigo, v.nombre, v.especie, v.producto,
+                            v.linea_id, v.linea_codigo,
                             (select count(*) from receta_etapas e where e.receta_id = v.id)::int as etapas
-                       from v_recetas v where activa order by nombre`);
-  return { procesos: r.rows };
+                       from v_recetas v where v.activa order by v.nombre`);
+  const etapas = await q(`select receta_id, tipo, linea_id from receta_etapas where tipo = 'linea'`);
+  const procesos = r.rows.map(p => {
+    const lineas = etapas.rows.filter(e => e.receta_id === p.id).map(e => e.linea_id);
+    if (!lineas.length && p.linea_id) lineas.push(p.linea_id);
+    return { ...p, lineas: [...new Set(lineas)] };
+  });
+  return { procesos };
+});
+
+// Proceso vigente del turno
+app.patch('/api/turnos/:id/proceso', async (req, reply) => {
+  const b = req.body || {};
+  try {
+    const r = await q('update turnos set proceso_id = $2 where id = $1 returning id, proceso_id',
+      [req.params.id, b.proceso_id ?? null]);
+    if (!r.rowCount) return reply.code(404).send({ error: 'turno no existe' });
+    return r.rows[0];
+  } catch (e) {
+    return reply.code(400).send({ error: e.message });
+  }
 });
 
 // ---------------- datos de demostración ----------------

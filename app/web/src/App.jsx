@@ -36,6 +36,8 @@ export default function App() {
   const [conexiones, setConexiones] = useState([]);
   const [procesos, setProcesos] = useState([]);
   const [proceso, setProceso] = useState(null);
+  const [procesoId, setProcesoId] = useState(null);
+  const [armar, setArmar] = useState(null);   // {nombre, lineas: []}
   const [sel, setSel] = useState('todas');
 
   const [locales, setLocales] = useState({});   // maquina_id -> parada local
@@ -85,6 +87,7 @@ export default function App() {
         setTrama(lin.trama);
         setConexiones(lin.conexiones || []);
         setProcesos(proc.procesos || []);
+        setProcesoId(catFresca.turno?.proceso_id ? Number(catFresca.turno.proceso_id) : null);
         setSinRed(false);
         setError(null);
         await guardarCatalogo(catFresca);
@@ -221,14 +224,27 @@ export default function App() {
     };
   }
 
+  const procesoSel = procesos.find(p => p.id === procesoId) || null;
+  const lineasVisibles = procesoSel && procesoSel.lineas?.length
+    ? lineas.filter(l => procesoSel.lineas.includes(l.linea_id))
+    : lineas;
+
+  // Con un proceso elegido, el tablero muestra solo las máquinas de sus líneas
+  const maqsVisibles = useMemo(() => {
+    if (!procesoSel || !procesoSel.lineas?.length) return maqs;
+    const ids = new Set(
+      (trama || []).filter(t => procesoSel.lineas.includes(t.linea_id)).map(t => t.maquina_id));
+    return maqs.filter(m => ids.has(m.id));
+  }, [maqs, trama, procesoSel]);
+
   const areas = useMemo(() => {
     if (!cat) return [];
     // solo las áreas con equipos: una planta con 6 áreas y 2 máquinas no debe
     // mostrar cuatro columnas vacías
     return cat.areas
-      .map(a => ({ ...a, maquinas: maqs.filter(m => m.area_id === a.id) }))
+      .map(a => ({ ...a, maquinas: maqsVisibles.filter(m => m.area_id === a.id) }))
       .filter(a => a.maquinas.length > 0);
-  }, [cat, maqs]);
+  }, [cat, maqsVisibles]);
 
   const lineaActual = (sel === 'todas' || String(sel).startsWith('p:'))
     ? null
@@ -1049,7 +1065,10 @@ export default function App() {
           <div className="mark" />
           <div>
             <b>Tablero de Planta</b>
-            <span>{cat?.turno ? `${cat.turno.nombre} · ${cat.turno.supervisor}` : 'Sin turno activo'}</span>
+            <span>
+              {cat?.turno ? `${cat.turno.nombre} · ${cat.turno.supervisor}` : 'Sin turno activo'}
+              {procesoSel ? ` · ${procesoSel.nombre}` : ''}
+            </span>
           </div>
         </div>
 
@@ -1078,6 +1097,28 @@ export default function App() {
 
       <div className="layout">
         <aside className="side">
+          <div className="proceso-box">
+            <div className="side-h">Proceso del turno</div>
+            <select value={procesoId || ''}
+                    onChange={async e => {
+                      const id = e.target.value ? Number(e.target.value) : null;
+                      setProcesoId(id);
+                      setSel('todas');
+                      if (cat?.turno) {
+                        try { await api.setProcesoTurno(cat.turno.id, id); } catch { /* sin red */ }
+                      }
+                    }}>
+              <option value="">Todos los procesos</option>
+              {procesos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+            </select>
+            <button className="btn-armar" onClick={() => setArmar({ nombre: '', lineas: [] })}>
+              ＋ Armar proceso del turno
+            </button>
+            {procesoSel && (
+              <small>{procesoSel.lineas.length} línea(s) · {procesoSel.estapas ?? procesoSel.etapas} etapas</small>
+            )}
+          </div>
+
           <div className="side-h">Líneas de planta</div>
           <button className={`line-item ${sel === 'todas' ? 'on' : ''}`} onClick={() => setSel('todas')}>
             <span className="line-badge">
@@ -1097,7 +1138,7 @@ export default function App() {
             </span>
           </button>
 
-          {lineas.map(l => {
+          {lineasVisibles.map(l => {
             const st = estadoLinea(l);
             return (
               <button key={l.linea_id} className={`line-item ${sel === l.linea_id ? 'on' : ''}`}
@@ -1256,6 +1297,62 @@ export default function App() {
       </div>
 
       {/* ---- paneles ---- */}
+      {armar && (
+        <div className="sheet">
+          <div className="top">
+            <div>
+              <h3>Proceso del turno</h3>
+              <div className="sub">Elegí las líneas que se van a operar hoy</div>
+            </div>
+            <button className="x" onClick={() => setArmar(null)}>✕</button>
+          </div>
+
+          <div className="armar-box">
+            <input placeholder="Nombre del proceso (ej. HG fresco + porciones)"
+                   value={armar.nombre}
+                   onChange={e => setArmar({ ...armar, nombre: e.target.value })} />
+
+            <div className="armar-lineas">
+              {lineas.map(l => {
+                const on = armar.lineas.includes(l.linea_id);
+                return (
+                  <button key={l.linea_id}
+                          className={`armar-linea ${on ? 'on' : ''}`}
+                          onClick={() => setArmar(prev => ({
+                            ...prev,
+                            lineas: prev.lineas.includes(l.linea_id)
+                              ? prev.lineas.filter(x => x !== l.linea_id)
+                              : [...prev.lineas, l.linea_id]
+                          }))}>
+                    <span>{l.nombre}</span>
+                    <small>{l.maquinas} máquinas</small>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="wz-foot">
+            <button className="ghost" onClick={() => setArmar(null)}>Cancelar</button>
+            <button className="btn-go small" disabled={!armar.nombre.trim() || !armar.lineas.length}
+                    onClick={async () => {
+                      const r = await api.crearReceta({ nombre: armar.nombre });
+                      await api.guardarEtapas(r.id, armar.lineas.map((id, i) => ({
+                        orden: i + 1, tipo: 'linea', linea_id: id
+                      })));
+                      if (cat?.turno) await api.setProcesoTurno(cat.turno.id, r.id);
+                      const proc = await api.procesos();
+                      setProcesos(proc.procesos || []);
+                      setProcesoId(r.id);
+                      setSel('todas');
+                      setArmar(null);
+                    }}>
+              Guardar proceso
+            </button>
+          </div>
+        </div>
+      )}
+
       {sheet?.tipo === 'categorias' && (
         <div className="sheet">
           <div className="top">

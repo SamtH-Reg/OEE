@@ -45,5 +45,7 @@ export const api = {
   procesos: () => req('/api/procesos'),
   demo: () => req('/api/demo'),
   eliminarDemo: () => req('/api/demo/eliminar', { method: 'POST', body: JSON.stringify({ confirmar: true }) }),
+  setProcesoTurno: (turnoId, procesoId) =>
+    req(`/api/turnos/${turnoId}/proceso`, { method: 'PATCH', body: JSON.stringify({ proceso_id: procesoId }) }),
   historial: (q = '') => req('/api/historial' + q)
 };
