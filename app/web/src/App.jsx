@@ -304,7 +304,7 @@ export default function App() {
       estado: st.estado,
       causa: st.causa,
       origen: st.origen,
-      tiempo: st.estado === 'operando' ? '' : minutos(st.desde, ahora)
+      tiempo: st.estado === 'operando' ? '' : (minutos(st.desde, ahora) === '0 min' ? 'recién' : minutos(st.desde, ahora))
     };
   });
 
