@@ -21,6 +21,9 @@ const ICONOS = {
   camion: 'M2 7h11v9H2z M13 10h4l4 4v2h-8z M6 18.2a1.7 1.7 0 1 0 0 .1Z M17.5 18.2a1.7 1.7 0 1 0 0 .1Z'
 };
 
+const sinTildes = (s) =>
+  (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
 function minutos(desde, ahora) {
   if (!desde) return '';
   const min = Math.max(0, Math.floor((ahora - new Date(desde).getTime()) / 60000));
@@ -40,6 +43,7 @@ export default function App() {
   const [armar, setArmar] = useState(null);   // {nombre, lineas: []}
   const [lineasSel, setLineasSel] = useState([]);      // líneas del proceso del turno
   const [nombreProceso, setNombreProceso] = useState('');
+  const [buscarArmado, setBuscarArmado] = useState(''); // texto del buscador de armados
   const [sel, setSel] = useState('todas');
 
   const [locales, setLocales] = useState({});   // maquina_id -> parada local
@@ -231,12 +235,41 @@ export default function App() {
   }
 
   const procesoSel = procesos.find(p => p.id === procesoId) || null;
-  const lineasVisibles = lineasSel.length
-    ? lineas.filter(l => lineasSel.includes(l.linea_id))
-    : lineas;
 
+  // El buscador filtra los armados por nombre (sin tildes ni mayúsculas):
+  // se escribe «porciones» y queda sólo el armado que lo lleva.
+  const armadosFiltrados = useMemo(() => {
+    const t = sinTildes(buscarArmado.trim());
+    return t ? procesos.filter(p => sinTildes(p.nombre).includes(t)) : procesos;
+  }, [procesos, buscarArmado]);
+
+  // Con un armado elegido se siguen viendo TODAS las líneas de planta: las del
+  // armado vienen marcadas y el resto se puede marcar. Si la lista mostrara
+  // sólo las del armado, agregar la línea que falta sería imposible sin borrar
+  // el armado primero.
+  const lineasVisibles = lineas;
+
+  async function elegirArmado(pr) {
+    setProcesoId(pr.id);
+    setLineasSel(pr.lineas || []);
+    setNombreProceso(pr.nombre);
+    setBuscarArmado('');
+    setSel('todas');
+    if (cat?.turno) {
+      try { await api.setProcesoTurno(cat.turno.id, pr.id); } catch { /* sin red */ }
+    }
+  }
+
+  function armadoNuevo() {
+    setProcesoId(null);
+    setLineasSel([]);
+    setNombreProceso(buscarArmado.trim());
+    setBuscarArmado('');
+  }
+
+  // Marcar o desmarcar una línea del turno: si hay un armado elegido, el
+  // guardado actualiza ese armado (no crea uno nuevo con el mismo nombre).
   function toggleLinea(lineaId) {
-    setProcesoId(null);   // queda como armado nuevo hasta guardar
     setLineasSel(prev => prev.includes(lineaId)
       ? prev.filter(x => x !== lineaId)
       : [...prev, lineaId]);
@@ -1133,37 +1166,51 @@ export default function App() {
         <aside className="side">
           <div className="proceso-box">
             <div className="side-h">Proceso del turno</div>
-            <select className="proceso-sel"
-                    value={procesoId || ''}
-                    onChange={async e => {
-                      const id = e.target.value ? Number(e.target.value) : null;
-                      setProcesoId(id);
-                      const pr = procesos.find(x => x.id === id);
-                      setLineasSel(pr ? pr.lineas || [] : []);
-                      setNombreProceso(pr ? pr.nombre : '');
-                      setSel('todas');
-                      if (cat?.turno) {
-                        try { await api.setProcesoTurno(cat.turno.id, id); } catch { /* sin red */ }
-                      }
-                    }}>
-              <option value="">Armado nuevo…</option>
-              {procesos.map(pr => (
-                <option key={pr.id} value={pr.id}>
-                  {pr.nombre} ({pr.lineas?.length || 0} líneas)
-                </option>
+
+            <div className="armado-buscar">
+              <svg viewBox="0 0 24 24" className="lupa" aria-hidden="true">
+                <circle cx="11" cy="11" r="6.5" />
+                <path d="m16.2 16.2 4.3 4.3" />
+              </svg>
+              <input placeholder="Buscar armado…" value={buscarArmado}
+                     aria-label="Buscar armado"
+                     onChange={e => setBuscarArmado(e.target.value)} />
+              {buscarArmado && (
+                <button className="limpiar" onClick={() => setBuscarArmado('')}
+                        aria-label="Limpiar búsqueda">✕</button>
+              )}
+            </div>
+
+            <div className="armado-lista">
+              {armadosFiltrados.map(pr => (
+                <button key={pr.id} className={`armado-item ${procesoId === pr.id ? 'on' : ''}`}
+                        onClick={() => elegirArmado(pr)}>
+                  <b>{pr.nombre}</b>
+                  <small>{(pr.lineas?.length || 0)} {(pr.lineas?.length || 0) === 1 ? 'línea' : 'líneas'}</small>
+                </button>
               ))}
-            </select>
+              {!armadosFiltrados.length && (
+                <div className="armado-vacio">
+                  {procesos.length ? 'Ningún armado con ese nombre' : 'Todavía no hay armados'}
+                </div>
+              )}
+              <button className={`armado-item nuevo ${procesoId ? '' : 'on'}`} onClick={armadoNuevo}>
+                <b>＋ Armado nuevo</b>
+                {buscarArmado.trim() && <small>{buscarArmado.trim()}</small>}
+              </button>
+            </div>
+
             <input className="proceso-nombre" placeholder="Nombre del proceso"
                    value={nombreProceso}
                    onChange={e => setNombreProceso(e.target.value)} />
             <div className="proceso-resumen">
               <span>
                 <b>{lineasSel.length}</b> de {lineas.length} líneas
-                {lineasSel.length === 0 && <em> · se muestran todas</em>}
+                {lineasSel.length === 0 && <em> · tablero completo</em>}
               </span>
               <button className="btn-guardar-proc" onClick={guardarProcesoTurno}
                       disabled={!lineasSel.length}>
-                Guardar
+                {procesoId ? 'Guardar cambios' : 'Guardar'}
               </button>
             </div>
           </div>

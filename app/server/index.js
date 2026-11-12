@@ -810,14 +810,23 @@ async function guardarReceta(id, b) {
     await client.query('begin');
     let recetaId = id;
     if (recetaId) {
+      const cur = await client.query('select * from recetas where id = $1', [recetaId]);
+      if (!cur.rowCount) throw new Error('receta no existe');
+      const c = cur.rows[0];
+      // PUT parcial: lo que no viene en el cuerpo se queda como está. El tablero
+      // manda sólo el nombre del armado y no debe borrarle especie, producto,
+      // línea ni toneladas, ni quedarse sin código.
+      const val = (k) => (b[k] === undefined ? c[k] : b[k]);
       const r = await client.query(
         `update recetas set codigo=$2, nombre=$3, especie_id=$4, producto_id=$5, linea_id=$6,
                             toneladas_turno=$7, rendimiento_pct=$8, vigente_desde=$9,
                             vigente_hasta=$10, activa=$11, notas=$12
           where id=$1 returning id`,
-        [recetaId, codigo(b.codigo), texto(b.nombre), b.especie_id ?? null, b.producto_id ?? null,
-         b.linea_id ?? null, b.toneladas_turno ?? null, b.rendimiento_pct ?? null,
-         b.vigente_desde || null, b.vigente_hasta || null, b.activa ?? true, texto(b.notas, 400)]);
+        [recetaId, codigo(val('codigo')) || c.codigo, texto(val('nombre')) || c.nombre,
+         val('especie_id') ?? null, val('producto_id') ?? null,
+         val('linea_id') ?? null, val('toneladas_turno') ?? null, val('rendimiento_pct') ?? null,
+         val('vigente_desde') || null, val('vigente_hasta') || null,
+         val('activa') ?? true, texto(val('notas'), 400)]);
       if (!r.rowCount) throw new Error('receta no existe');
     } else {
       const r = await client.query(
@@ -830,13 +839,17 @@ async function guardarReceta(id, b) {
       recetaId = r.rows[0].id;
     }
 
-    await client.query('delete from receta_maquinas where receta_id = $1', [recetaId]);
-    for (const d of (b.distribucion || [])) {
-      if (!d.maquina_id) continue;
-      await client.query(
-        `insert into receta_maquinas (receta_id, maquina_id, porcentaje)
-         values ($1, $2, $3) on conflict (receta_id, maquina_id) do update set porcentaje = excluded.porcentaje`,
-        [recetaId, d.maquina_id, d.porcentaje ?? 100]);
+    // La distribución por máquina sólo se reemplaza si viene en el cuerpo: un
+    // PUT que sólo cambia el nombre no puede dejar la receta sin distribución.
+    if (b.distribucion !== undefined) {
+      await client.query('delete from receta_maquinas where receta_id = $1', [recetaId]);
+      for (const d of (b.distribucion || [])) {
+        if (!d.maquina_id) continue;
+        await client.query(
+          `insert into receta_maquinas (receta_id, maquina_id, porcentaje)
+           values ($1, $2, $3) on conflict (receta_id, maquina_id) do update set porcentaje = excluded.porcentaje`,
+          [recetaId, d.maquina_id, d.porcentaje ?? 100]);
+      }
     }
     await client.query('commit');
     return recetaId;
