@@ -21,10 +21,7 @@ const ICONOS = {
   camion: 'M2 7h11v9H2z M13 10h4l4 4v2h-8z M6 18.2a1.7 1.7 0 1 0 0 .1Z M17.5 18.2a1.7 1.7 0 1 0 0 .1Z'
 };
 
-const sinTildes = (s) =>
-  (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-
-function minutos(desde, ahora) {
+const minutos = (desde, ahora) => {
   if (!desde) return '';
   const min = Math.max(0, Math.floor((ahora - new Date(desde).getTime()) / 60000));
   if (min < 60) return `${min} min`;
@@ -42,8 +39,7 @@ export default function App() {
   const [procesoId, setProcesoId] = useState(null);
   const [armar, setArmar] = useState(null);   // {nombre, lineas: []}
   const [lineasSel, setLineasSel] = useState([]);      // líneas del proceso del turno
-  const [nombreProceso, setNombreProceso] = useState('');
-  const [buscar, setBuscar] = useState('');          // texto del buscador de armados y líneas
+  const [lineasAbierto, setLineasAbierto] = useState(false);  // desplegable de líneas del turno
   const [sel, setSel] = useState('todas');
 
   const [locales, setLocales] = useState({});   // maquina_id -> parada local
@@ -97,7 +93,6 @@ export default function App() {
         setProcesoId(pid);
         const psel = (proc.procesos || []).find(x => x.id === pid);
         setLineasSel(psel ? psel.lineas || [] : []);
-        setNombreProceso(psel ? psel.nombre : '');
         setSinRed(false);
         setError(null);
         await guardarCatalogo(catFresca);
@@ -236,38 +231,14 @@ export default function App() {
 
   const procesoSel = procesos.find(p => p.id === procesoId) || null;
 
-  // El buscador filtra armados y líneas por nombre (sin tildes ni mayúsculas):
-  // se escribe «porciones» y quedan el armado y la línea que lo llevan.
-  const armadosFiltrados = useMemo(() => {
-    const t = sinTildes(buscar.trim());
-    return t ? procesos.filter(p => sinTildes(p.nombre).includes(t)) : procesos;
-  }, [procesos, buscar]);
+  // ¿cambió la selección respecto de lo guardado? así «Guardar» sólo se activa si hay algo que guardar
+  const cambiosPendientes = useMemo(() => {
+    const base = [...(procesoSel?.lineas || [])].sort((a, b) => a - b);
+    const ahora = [...lineasSel].sort((a, b) => a - b);
+    return base.length !== ahora.length || base.some((v, i) => v !== ahora[i]);
+  }, [procesoSel, lineasSel]);
 
-  const lineasFiltradas = useMemo(() => {
-    const t = sinTildes(buscar.trim());
-    return t ? lineas.filter(l => sinTildes(l.nombre).includes(t)) : lineas;
-  }, [lineas, buscar]);
-
-  async function elegirArmado(pr) {
-    setProcesoId(pr.id);
-    setLineasSel(pr.lineas || []);
-    setNombreProceso(pr.nombre);
-    setBuscar('');
-    setSel('p:' + pr.id);        // el escenario pasa a mostrar el proceso armado
-    if (cat?.turno) {
-      try { await api.setProcesoTurno(cat.turno.id, pr.id); } catch { /* sin red */ }
-    }
-  }
-
-  function armadoNuevo() {
-    setProcesoId(null);
-    setLineasSel([]);
-    setNombreProceso(buscar.trim());
-    setBuscar('');
-  }
-
-  // Marcar o desmarcar una línea del turno: si hay un armado elegido, el
-  // guardado actualiza ese armado (no crea uno nuevo con el mismo nombre).
+  // Marcar o desmarcar una línea del turno.
   function toggleLinea(lineaId) {
     setLineasSel(prev => prev.includes(lineaId)
       ? prev.filter(x => x !== lineaId)
@@ -275,22 +246,23 @@ export default function App() {
   }
 
   async function guardarProcesoTurno() {
-    const nombre = nombreProceso.trim() || `Proceso ${new Date().toLocaleDateString('es-CL')}`;
     try {
       let id = procesoId;
-      if (id) {
-        await api.editarReceta(id, { nombre });
-      } else {
+      if (!id) {
+        // sin armado visible: el proceso del turno se nombra con las líneas elegidas
+        const nombre = lineasSel
+          .map(lid => lineas.find(l => l.linea_id === lid)?.nombre || '')
+          .filter(Boolean).join(' + ').slice(0, 60) || 'Proceso del turno';
         const r = await api.crearReceta({ nombre });
         id = r.id;
       }
       await api.guardarEtapas(id, lineasSel.map((lid, i) => ({ orden: i + 1, tipo: 'linea', linea_id: lid })));
       if (cat?.turno) await api.setProcesoTurno(cat.turno.id, id);
       setProcesoId(id);
-      setSel('p:' + id);
+      setLineasAbierto(false);
       const proc = await api.procesos();
       setProcesos(proc.procesos || []);
-      setToast({ titulo: 'Proceso guardado', detalle: `${nombre} · ${lineasSel.length} líneas` });
+      setToast({ titulo: 'Turno guardado', detalle: `${lineasSel.length} ${lineasSel.length === 1 ? 'línea' : 'líneas'}` });
     } catch (e) {
       setError(e.message);
     }
@@ -1134,7 +1106,7 @@ export default function App() {
             <b>Tablero de Planta</b>
             <span>
               {cat?.turno ? `${cat.turno.nombre} · ${cat.turno.supervisor}` : 'Sin turno activo'}
-              {procesoSel ? ` · ${procesoSel.nombre}` : ''}
+              {lineasSel.length ? ` · ${lineasSel.length} ${lineasSel.length === 1 ? 'línea' : 'líneas'}` : ''}
             </span>
           </div>
         </div>
@@ -1167,84 +1139,53 @@ export default function App() {
           <div className="proceso-box">
             <div className="side-h">Proceso del turno</div>
 
-            <div className="armado-buscar">
-              <svg viewBox="0 0 24 24" className="lupa" aria-hidden="true">
-                <circle cx="11" cy="11" r="6.5" />
-                <path d="m16.2 16.2 4.3 4.3" />
-              </svg>
-              <input placeholder="Buscar línea o armado…" value={buscar}
-                     aria-label="Buscar línea o armado"
-                     onChange={e => setBuscar(e.target.value)} />
-              {buscar && (
-                <button className="limpiar" onClick={() => setBuscar('')}
-                        aria-label="Limpiar búsqueda">✕</button>
-              )}
-            </div>
-
-            <div className="picker-lista">
-              {armadosFiltrados.length > 0 && (
-                <>
-                  <div className="picker-h">Armados</div>
-                  {armadosFiltrados.map(pr => (
-                    <button key={pr.id} className={`armado-item ${procesoId === pr.id ? 'on' : ''}`}
-                            onClick={() => elegirArmado(pr)}>
-                      <b>{pr.nombre}</b>
-                      <small>{(pr.lineas?.length || 0)} {(pr.lineas?.length || 0) === 1 ? 'línea' : 'líneas'}</small>
-                    </button>
-                  ))}
-                </>
-              )}
-
-              <div className="picker-h">
-                {buscar.trim() ? 'Líneas que coinciden' : 'Líneas'}
-                <em>{lineasSel.length} en el turno</em>
-              </div>
-              {lineasFiltradas.map(l => {
-                const st = estadoLinea(l);
-                const dentro = lineasSel.includes(l.linea_id);
-                return (
-                  <div key={l.linea_id}
-                       className={`picker-linea ${dentro ? 'on' : ''} ${sel === l.linea_id ? 'viendo' : ''}`}>
-                    <span className={`line-check ${dentro ? 'on' : ''}`} role="checkbox"
-                          aria-checked={dentro}
-                          aria-label={dentro ? `Quitar ${l.nombre} del turno` : `Agregar ${l.nombre} al turno`}
-                          onClick={() => toggleLinea(l.linea_id)}>
-                      {dentro ? '✓' : ''}
-                    </span>
-                    <button className="picker-nombre"
-                            onClick={() => setSel(sel === l.linea_id ? 'todas' : l.linea_id)}>
-                      <b>{l.nombre}</b>
-                      <small>
-                        {l.maquinas} máquinas
-                        {st.estado === 'operando' ? ' · operando' : ` · ${st.causa}`}
-                      </small>
-                    </button>
-                  </div>
-                );
-              })}
-              {!lineasFiltradas.length && (
-                <div className="armado-vacio">Ninguna línea con ese nombre</div>
-              )}
-
-              <button className={`armado-item nuevo ${procesoId ? '' : 'on'}`} onClick={armadoNuevo}>
-                <b>＋ Armado nuevo</b>
-                {buscar.trim() && <small>{buscar.trim()}</small>}
-              </button>
-            </div>
-
-            <input className="proceso-nombre" placeholder="Nombre del proceso"
-                   value={nombreProceso}
-                   onChange={e => setNombreProceso(e.target.value)} />
-            <div className="proceso-resumen">
+            <button className={`lineas-sel ${lineasAbierto ? 'abierto' : ''}`}
+                    onClick={() => setLineasAbierto(v => !v)} aria-expanded={lineasAbierto}>
               <span>
-                <b>{lineasSel.length}</b> de {lineas.length} líneas
-                {lineasSel.length === 0 && <em> · tablero completo</em>}
+                <b>Líneas del turno</b>
+                <small>
+                  {lineasSel.length
+                    ? `${lineasSel.length} de ${lineas.length} ${lineas.length === 1 ? 'línea' : 'líneas'}`
+                    : 'Ninguna marcada'}
+                </small>
               </span>
-              <button className="btn-guardar-proc" onClick={guardarProcesoTurno}
-                      disabled={!lineasSel.length}>
-                {procesoId ? 'Guardar cambios' : 'Guardar'}
-              </button>
-            </div>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9.5 6 6 6-6" /></svg>
+            </button>
+
+            {lineasAbierto && (
+              <div className="lineas-lista">
+                {lineas.map(l => {
+                  const dentro = lineasSel.includes(l.linea_id);
+                  return (
+                    <div key={l.linea_id} className={`lineas-op ${dentro ? 'on' : ''}`}>
+                      <button className="lineas-toggle" aria-pressed={dentro}
+                              onClick={() => toggleLinea(l.linea_id)}>
+                        <span className={`line-check ${dentro ? 'on' : ''}`} aria-hidden="true">
+                          {dentro ? '✓' : ''}
+                        </span>
+                        <b>{l.nombre}</b>
+                      </button>
+                      <button className="lineas-abrir" aria-label={`Ver ${l.nombre}`}
+                              onClick={() => { setSel(l.linea_id); setLineasAbierto(false); }}>
+                        ›
+                      </button>
+                    </div>
+                  );
+                })}
+                {!lineas.length && <div className="armado-vacio">No hay líneas cargadas</div>}
+                {procesoId && (
+                  <button className="lineas-ver"
+                          onClick={() => { setSel('p:' + procesoId); setLineasAbierto(false); }}>
+                    Ver el proceso del turno
+                  </button>
+                )}
+              </div>
+            )}
+
+            <button className="btn-guardar-proc ancho" onClick={guardarProcesoTurno}
+                    disabled={!lineasSel.length || !cambiosPendientes}>
+              {cambiosPendientes ? 'Guardar cambios' : 'Guardado'}
+            </button>
           </div>
 
           {lineaActual && (
