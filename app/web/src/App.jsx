@@ -37,7 +37,6 @@ export default function App() {
   const [procesos, setProcesos] = useState([]);
   const [proceso, setProceso] = useState(null);
   const [procesoId, setProcesoId] = useState(null);
-  const [armar, setArmar] = useState(null);   // {nombre, lineas: []}
   const [lineasSel, setLineasSel] = useState([]);      // líneas del proceso del turno
   const [lineasAbierto, setLineasAbierto] = useState(false);  // desplegable de líneas del turno
   const [sel, setSel] = useState('todas');
@@ -93,6 +92,9 @@ export default function App() {
         setProcesoId(pid);
         const psel = (proc.procesos || []).find(x => x.id === pid);
         setLineasSel(psel ? psel.lineas || [] : []);
+        // arrancar en el proceso del turno (no hay tablero de "toda la planta")
+        if (pid) setSel('p:' + pid);
+        else if (psel?.lineas?.length) setSel(psel.lineas[0]);
         setSinRed(false);
         setError(null);
         await guardarCatalogo(catFresca);
@@ -279,15 +281,6 @@ export default function App() {
       (trama || []).filter(t => lineasSel.includes(t.linea_id)).map(t => t.maquina_id));
     return maqs.filter(m => ids.has(m.id));
   }, [maqs, trama, lineasSel]);
-
-  const areas = useMemo(() => {
-    if (!cat) return [];
-    // solo las áreas con equipos: una planta con 6 áreas y 2 máquinas no debe
-    // mostrar cuatro columnas vacías
-    return cat.areas
-      .map(a => ({ ...a, maquinas: maqsVisibles.filter(m => m.area_id === a.id) }))
-      .filter(a => a.maquinas.length > 0);
-  }, [cat, maqsVisibles]);
 
   const lineaActual = (sel === 'todas' || String(sel).startsWith('p:'))
     ? null
@@ -1247,7 +1240,6 @@ export default function App() {
                     proceso.receta.toneladas_turno ? `${Number(proceso.receta.toneladas_turno)} t/turno` : null
                   ].filter(Boolean).join(' · ')}
                 </span>
-                <button className="volver-planta" onClick={() => setSel('todas')}>← Planta</button>
               </div>
               <div className="proc-flow">
                 {etapasAgrupadas.map((g, gi) => (
@@ -1287,7 +1279,11 @@ export default function App() {
                     ? 'Línea operando'
                     : `${estadoLinea(lineaActual).estado === 'detenida' ? 'Parada total' : 'Parada parcial'} · ${estadoLinea(lineaActual).causa} · desde ${estadoLinea(lineaActual).origen}`}
                 </span>
-                <button className="volver-planta" onClick={() => setSel('todas')}>← Planta</button>
+                {procesoId && (
+                  <button className="volver-planta" onClick={() => setSel('p:' + procesoId)}>
+                    ← Proceso del turno
+                  </button>
+                )}
               </div>
               <div className="flow split">
                 {columnasLinea.map((col, ci) => (
@@ -1311,83 +1307,24 @@ export default function App() {
                 si no, se detiene lo que viene aguas abajo.
               </p>
             </>
-          ) : maqs.length === 0 ? (
+          ) : (
             <div className="empty">
               <div className="empty-mark">◫</div>
-              <h2>La planta está vacía</h2>
-              <p>Armá la primera línea con sus equipos y su receta. Toma tres pasos y queda lista para operar.</p>
-              <button className="btn-go small" onClick={() => setAjustes(true)}>＋ Armar línea</button>
-            </div>
-          ) : (
-            <div className="board">
-              {areas.map(a => (
-                <section className="area" key={a.id}>
-                  <h2>{a.nombre} <em>{a.maquinas.length}</em></h2>
-                  {a.maquinas.map(m => <Tile key={m.id} m={m} />)}
-                </section>
-              ))}
+              <h2>{maqs.length ? 'Elegí una línea' : 'La planta está vacía'}</h2>
+              <p>
+                {maqs.length
+                  ? 'Tocá una línea del turno en el panel para ver sus máquinas y registrar las fallas.'
+                  : 'Armá la primera línea con sus equipos y su receta. Toma tres pasos y queda lista para operar.'}
+              </p>
+              {!maqs.length && (
+                <button className="btn-go small" onClick={() => setAjustes(true)}>＋ Armar línea</button>
+              )}
             </div>
           )}
         </main>
       </div>
 
       {/* ---- paneles ---- */}
-      {armar && (
-        <div className="sheet">
-          <div className="top">
-            <div>
-              <h3>Proceso del turno</h3>
-              <div className="sub">Elegí las líneas que se van a operar hoy</div>
-            </div>
-            <button className="x" onClick={() => setArmar(null)}>✕</button>
-          </div>
-
-          <div className="armar-box">
-            <input placeholder="Nombre del proceso (ej. HG fresco + porciones)"
-                   value={armar.nombre}
-                   onChange={e => setArmar({ ...armar, nombre: e.target.value })} />
-
-            <div className="armar-lineas">
-              {lineas.map(l => {
-                const on = armar.lineas.includes(l.linea_id);
-                return (
-                  <button key={l.linea_id}
-                          className={`armar-linea ${on ? 'on' : ''}`}
-                          onClick={() => setArmar(prev => ({
-                            ...prev,
-                            lineas: prev.lineas.includes(l.linea_id)
-                              ? prev.lineas.filter(x => x !== l.linea_id)
-                              : [...prev.lineas, l.linea_id]
-                          }))}>
-                    <span>{l.nombre}</span>
-                    <small>{l.maquinas} máquinas</small>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="wz-foot">
-            <button className="ghost" onClick={() => setArmar(null)}>Cancelar</button>
-            <button className="btn-go small" disabled={!armar.nombre.trim() || !armar.lineas.length}
-                    onClick={async () => {
-                      const r = await api.crearReceta({ nombre: armar.nombre });
-                      await api.guardarEtapas(r.id, armar.lineas.map((id, i) => ({
-                        orden: i + 1, tipo: 'linea', linea_id: id
-                      })));
-                      if (cat?.turno) await api.setProcesoTurno(cat.turno.id, r.id);
-                      const proc = await api.procesos();
-                      setProcesos(proc.procesos || []);
-                      setProcesoId(r.id);
-                      setSel('todas');
-                      setArmar(null);
-                    }}>
-              Guardar proceso
-            </button>
-          </div>
-        </div>
-      )}
-
       {sheet?.tipo === 'categorias' && (
         <div className="sheet">
           <div className="top">
