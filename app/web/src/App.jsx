@@ -236,6 +236,7 @@ export default function App() {
     : lineas;
 
   function toggleLinea(lineaId) {
+    setProcesoId(null);   // queda como armado nuevo hasta guardar
     setLineasSel(prev => prev.includes(lineaId)
       ? prev.filter(x => x !== lineaId)
       : [...prev, lineaId]);
@@ -1132,6 +1133,26 @@ export default function App() {
         <aside className="side">
           <div className="proceso-box">
             <div className="side-h">Proceso del turno</div>
+            <select className="proceso-sel"
+                    value={procesoId || ''}
+                    onChange={async e => {
+                      const id = e.target.value ? Number(e.target.value) : null;
+                      setProcesoId(id);
+                      const pr = procesos.find(x => x.id === id);
+                      setLineasSel(pr ? pr.lineas || [] : []);
+                      setNombreProceso(pr ? pr.nombre : '');
+                      setSel('todas');
+                      if (cat?.turno) {
+                        try { await api.setProcesoTurno(cat.turno.id, id); } catch { /* sin red */ }
+                      }
+                    }}>
+              <option value="">Armado nuevo…</option>
+              {procesos.map(pr => (
+                <option key={pr.id} value={pr.id}>
+                  {pr.nombre} ({pr.lineas?.length || 0} líneas)
+                </option>
+              ))}
+            </select>
             <input className="proceso-nombre" placeholder="Nombre del proceso"
                    value={nombreProceso}
                    onChange={e => setNombreProceso(e.target.value)} />

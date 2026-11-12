@@ -902,3 +902,8 @@ header{
   margin-top:4px;
 }
 .line-check.on{background:var(--accent);border-color:var(--accent)}
+
+.proceso-sel{
+  height:46px;border:1px solid var(--line2);border-radius:11px;background:#fff;color:var(--ink);
+  font:600 13.5px inherit;padding:0 10px;width:100%;
+}
