@@ -263,7 +263,35 @@ export default function App() {
       : [...prev, lineaId]);
   }
 
+  // Equipos que quedarían en dos de las líneas elegidas: un equipo físico no
+  // puede correr en dos líneas armadas al mismo tiempo.
+  function conflictosDeTurno(ids) {
+    const dueno = new Map();
+    for (const t of (trama || [])) {
+      if (!ids.includes(t.linea_id)) continue;
+      if (!dueno.has(t.maquina_id)) dueno.set(t.maquina_id, []);
+      dueno.get(t.maquina_id).push(t.linea_id);
+    }
+    const nombreLinea = new Map(lineas.map(l => [l.linea_id, l.nombre]));
+    const nombreMaq = new Map(maqs.map(m => [m.id, m.nombre_corto]));
+    return [...dueno.entries()]
+      .filter(([, ls]) => new Set(ls).size > 1)
+      .map(([maq, ls]) => ({
+        maquina: nombreMaq.get(maq) || `equipo ${maq}`,
+        lineas: [...new Set(ls)].map(x => nombreLinea.get(x) || `línea ${x}`)
+      }));
+  }
+
   async function guardarProcesoTurno() {
+    const rep = conflictosDeTurno(lineasSel);
+    if (rep.length) {
+      const partes = rep.slice(0, 5).map(x => `${x.maquina} en ${x.lineas.join(' y ')}`);
+      setError('Estas líneas comparten equipos: ' + partes.join('; ') +
+        (rep.length > 5 ? ` y ${rep.length - 5} más` : '') +
+        '. Un equipo no puede estar en dos líneas armadas al mismo tiempo: detené su proceso en la ' +
+        'primera línea o dejá una sola de las dos en el turno.');
+      return;
+    }
     try {
       let id = procesoId;
       if (!id) {

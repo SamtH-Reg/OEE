@@ -98,6 +98,58 @@ app.get('/api/lineas', async () => {
   return { lineas: lineas.rows, trama: trama.rows, conexiones: conexiones.rows };
 });
 
+// ---------------- equipos repetidos en líneas armadas ----------------
+// Un equipo físico no puede estar en dos líneas del turno al mismo tiempo.
+
+// Equipos de `maquinaIds` que ya están en OTRA línea armada del turno vigente.
+async function equiposEnOtrasLineasArmadas(lineaId, maquinaIds) {
+  if (!maquinaIds.length) return [];
+  const r = await q(`
+    select m.id, m.nombre_corto, l.id as linea_id, l.nombre as linea
+      from linea_maquinas lm
+      join maquinas m on m.id = lm.maquina_id
+      join lineas l on l.id = lm.linea_id
+     where lm.maquina_id = any($1::int[])
+       and lm.linea_id <> $2
+       and lm.linea_id in (
+             select e.linea_id
+               from receta_etapas e
+               join turnos t on t.proceso_id = e.receta_id
+              where t.id = fn_turno_para(now()) and e.tipo = 'linea')
+     order by m.nombre_corto`, [maquinaIds, lineaId]);
+  return r.rows;
+}
+
+// Equipos que aparecen en más de una de las líneas dadas.
+async function equiposRepetidosEnLineas(lineaIds) {
+  if (!lineaIds.length) return [];
+  const r = await q(`
+    select m.id, m.nombre_corto, array_agg(l.nombre order by l.nombre) as lineas
+      from linea_maquinas lm
+      join maquinas m on m.id = lm.maquina_id
+      join lineas l on l.id = lm.linea_id
+     where lm.linea_id = any($1::int[])
+     group by m.id, m.nombre_corto
+    having count(distinct lm.linea_id) > 1
+     order by m.nombre_corto`, [lineaIds]);
+  return r.rows;
+}
+
+function mensajeEquipoRepetido(choque) {
+  const partes = [...new Set(choque.map(c => `${c.nombre_corto} ya está en ${c.linea}`))];
+  return 'No se puede sumar el equipo: ' + partes.join('; ') +
+    '. Un equipo no puede estar en dos líneas armadas a la vez — detené su proceso en esa línea ' +
+    '(o quitá esa línea del turno) antes de pasarlo a otra.';
+}
+
+function mensajeTurnoConRepetidos(rep) {
+  const partes = rep.slice(0, 5).map(x => `${x.nombre_corto} en ${x.lineas.join(' y ')}`);
+  return 'Estas líneas comparten equipos: ' + partes.join('; ') +
+    (rep.length > 5 ? ` y ${rep.length - 5} más` : '') +
+    '. Un equipo no puede estar en dos líneas armadas al mismo tiempo: detené su proceso en la ' +
+    'primera línea o queda una sola de las dos en el turno.';
+}
+
 // Reemplaza la trama completa de una línea (orden + cuello de botella).
 app.put('/api/lineas/:id/trama', async (req, reply) => {
   const lineaId = Number(req.params.id);
@@ -115,9 +167,30 @@ app.put('/api/lineas/:id/trama', async (req, reply) => {
     return reply.code(400).send({ error: 'hay máquinas repetidas en la trama' });
   }
 
+  // Un equipo que HOY está en otra línea armada del turno no puede sumarse a
+  // ésta: el mismo equipo físico no puede correr en dos líneas a la vez. Se
+  // revisan sólo los que se agregan (los que ya estaban no traban la edición).
+  try {
+    const previas = await q('select maquina_id from linea_maquinas where linea_id = $1', [lineaId]);
+    const antes = new Set(previas.rows.map(r => Number(r.maquina_id)));
+    const nuevas = [...ids].filter(id => !antes.has(id));
+    const choque = await equiposEnOtrasLineasArmadas(lineaId, nuevas);
+    if (choque.length) {
+      return reply.code(409).send({ error: mensajeEquipoRepetido(choque) });
+    }
+  } catch (e) {
+    return reply.code(400).send({ error: e.message });
+  }
+
   const client = await pool.connect();
   try {
     await client.query('begin');
+    // La tarjeta de Eventualidades es estándar de cada línea: si el editor no la
+    // manda, se conserva en su posición (no se pierde al guardar la trama).
+    const ever = await client.query(
+      `select lm.* from linea_maquinas lm join maquinas m on m.id = lm.maquina_id
+        where lm.linea_id = $1 and m.nombre_corto = 'Eventualidades' limit 1`, [lineaId]);
+
     await client.query('delete from linea_maquinas where linea_id = $1', [lineaId]);
     for (let i = 0; i < maquinas.length; i++) {
       await client.query(
@@ -130,6 +203,27 @@ app.put('/api/lineas/:id/trama', async (req, reply) => {
          maquinas[i].pos_x ?? null,
          maquinas[i].pos_y ?? null]
       );
+    }
+    if (ever.rowCount && !ids.has(Number(ever.rows[0].maquina_id))) {
+      const e = ever.rows[0];
+      const ocupado = await client.query(
+        `select 1 from linea_maquinas where linea_id = $1 and posicion = $2 and rama = $3`,
+        [lineaId, e.posicion, e.rama]);
+      if (!ocupado.rowCount) {
+        await client.query(
+          `insert into linea_maquinas (linea_id, maquina_id, posicion, rama, detiene_linea, pos_x, pos_y)
+           values ($1, $2, $3, $4, $5, $6, $7)`,
+          [lineaId, e.maquina_id, e.posicion, e.rama, e.detiene_linea, e.pos_x, e.pos_y]);
+      } else {
+        await client.query(
+          `insert into linea_maquinas (linea_id, maquina_id, posicion, rama, detiene_linea)
+           select $1, $2, coalesce(max(posicion), 0) + 1, 1, false
+             from linea_maquinas where linea_id = $1`,
+          [lineaId, e.maquina_id]);
+      }
+    } else if (!ever.rowCount) {
+      // línea nueva: la tarjeta de Eventualidades viene con la línea
+      await client.query('select fn_asegurar_eventualidades($1)', [lineaId]);
     }
     // conexiones entre bloques (quién alimenta a quién)
     await client.query('delete from linea_conexiones where linea_id = $1', [lineaId]);
@@ -494,6 +588,8 @@ app.post('/api/lineas', async (req, reply) => {
        returning *`,
       [code, texto(b.nombre), texto(b.descripcion, 240), b.orden ?? null,
        b.especie_id ?? null, b.producto_id ?? null]);
+    // cada línea nace con su tarjeta de Eventualidades (independiente de las demás)
+    await q('select fn_asegurar_eventualidades($1)', [r.rows[0].id]);
     return r.rows[0];
   } catch (e) {
     return reply.code(400).send({ error: e.code === '23505' ? 'ya existe una línea con ese código' : e.message });
@@ -984,6 +1080,13 @@ app.get('/api/procesos', async () => {
 app.patch('/api/turnos/:id/proceso', async (req, reply) => {
   const b = req.body || {};
   try {
+    // Regla: un equipo no puede estar en dos líneas armadas al mismo tiempo.
+    if (b.proceso_id) {
+      const et = await q(`select linea_id from receta_etapas where receta_id = $1 and tipo = 'linea'`,
+        [b.proceso_id]);
+      const rep = await equiposRepetidosEnLineas(et.rows.map(x => x.linea_id));
+      if (rep.length) return reply.code(409).send({ error: mensajeTurnoConRepetidos(rep) });
+    }
     const r = await q('update turnos set proceso_id = $2 where id = $1 returning id, proceso_id',
       [req.params.id, b.proceso_id ?? null]);
     if (!r.rowCount) return reply.code(404).send({ error: 'turno no existe' });
