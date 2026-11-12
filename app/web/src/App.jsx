@@ -38,6 +38,8 @@ export default function App() {
   const [proceso, setProceso] = useState(null);
   const [procesoId, setProcesoId] = useState(null);
   const [armar, setArmar] = useState(null);   // {nombre, lineas: []}
+  const [lineasSel, setLineasSel] = useState([]);      // líneas del proceso del turno
+  const [nombreProceso, setNombreProceso] = useState('');
   const [sel, setSel] = useState('todas');
 
   const [locales, setLocales] = useState({});   // maquina_id -> parada local
@@ -87,7 +89,11 @@ export default function App() {
         setTrama(lin.trama);
         setConexiones(lin.conexiones || []);
         setProcesos(proc.procesos || []);
-        setProcesoId(catFresca.turno?.proceso_id ? Number(catFresca.turno.proceso_id) : null);
+        const pid = catFresca.turno?.proceso_id ? Number(catFresca.turno.proceso_id) : null;
+        setProcesoId(pid);
+        const psel = (proc.procesos || []).find(x => x.id === pid);
+        setLineasSel(psel ? psel.lineas || [] : []);
+        setNombreProceso(psel ? psel.nombre : '');
         setSinRed(false);
         setError(null);
         await guardarCatalogo(catFresca);
@@ -225,17 +231,44 @@ export default function App() {
   }
 
   const procesoSel = procesos.find(p => p.id === procesoId) || null;
-  const lineasVisibles = procesoSel && procesoSel.lineas?.length
-    ? lineas.filter(l => procesoSel.lineas.includes(l.linea_id))
+  const lineasVisibles = lineasSel.length
+    ? lineas.filter(l => lineasSel.includes(l.linea_id))
     : lineas;
+
+  function toggleLinea(lineaId) {
+    setLineasSel(prev => prev.includes(lineaId)
+      ? prev.filter(x => x !== lineaId)
+      : [...prev, lineaId]);
+  }
+
+  async function guardarProcesoTurno() {
+    const nombre = nombreProceso.trim() || `Proceso ${new Date().toLocaleDateString('es-CL')}`;
+    try {
+      let id = procesoId;
+      if (id) {
+        await api.editarReceta(id, { nombre });
+      } else {
+        const r = await api.crearReceta({ nombre });
+        id = r.id;
+      }
+      await api.guardarEtapas(id, lineasSel.map((lid, i) => ({ orden: i + 1, tipo: 'linea', linea_id: lid })));
+      if (cat?.turno) await api.setProcesoTurno(cat.turno.id, id);
+      setProcesoId(id);
+      const proc = await api.procesos();
+      setProcesos(proc.procesos || []);
+      setToast({ titulo: 'Proceso guardado', detalle: `${nombre} · ${lineasSel.length} líneas` });
+    } catch (e) {
+      setError(e.message);
+    }
+  }
 
   // Con un proceso elegido, el tablero muestra solo las máquinas de sus líneas
   const maqsVisibles = useMemo(() => {
-    if (!procesoSel || !procesoSel.lineas?.length) return maqs;
+    if (!lineasSel.length) return maqs;
     const ids = new Set(
-      (trama || []).filter(t => procesoSel.lineas.includes(t.linea_id)).map(t => t.maquina_id));
+      (trama || []).filter(t => lineasSel.includes(t.linea_id)).map(t => t.maquina_id));
     return maqs.filter(m => ids.has(m.id));
-  }, [maqs, trama, procesoSel]);
+  }, [maqs, trama, lineasSel]);
 
   const areas = useMemo(() => {
     if (!cat) return [];
@@ -1099,24 +1132,19 @@ export default function App() {
         <aside className="side">
           <div className="proceso-box">
             <div className="side-h">Proceso del turno</div>
-            <select value={procesoId || ''}
-                    onChange={async e => {
-                      const id = e.target.value ? Number(e.target.value) : null;
-                      setProcesoId(id);
-                      setSel('todas');
-                      if (cat?.turno) {
-                        try { await api.setProcesoTurno(cat.turno.id, id); } catch { /* sin red */ }
-                      }
-                    }}>
-              <option value="">Todos los procesos</option>
-              {procesos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-            </select>
-            <button className="btn-armar" onClick={() => setArmar({ nombre: '', lineas: [] })}>
-              ＋ Armar proceso del turno
-            </button>
-            {procesoSel && (
-              <small>{procesoSel.lineas.length} línea(s) · {procesoSel.estapas ?? procesoSel.etapas} etapas</small>
-            )}
+            <input className="proceso-nombre" placeholder="Nombre del proceso"
+                   value={nombreProceso}
+                   onChange={e => setNombreProceso(e.target.value)} />
+            <div className="proceso-resumen">
+              <span>
+                <b>{lineasSel.length}</b> de {lineas.length} líneas
+                {lineasSel.length === 0 && <em> · se muestran todas</em>}
+              </span>
+              <button className="btn-guardar-proc" onClick={guardarProcesoTurno}
+                      disabled={!lineasSel.length}>
+                Guardar
+              </button>
+            </div>
           </div>
 
           <div className="side-h">Líneas de planta</div>
@@ -1143,10 +1171,11 @@ export default function App() {
             return (
               <button key={l.linea_id} className={`line-item ${sel === l.linea_id ? 'on' : ''}`}
                       onClick={() => setSel(l.linea_id)}>
-                <span className="line-badge">
-                  <svg viewBox="0 0 24 24">
-                    <path d="M4 7h16M4 12h16M4 17h10" />
-                  </svg>
+                <span className={`line-check ${lineasSel.includes(l.linea_id) ? 'on' : ''}`}
+                      role="checkbox"
+                      aria-checked={lineasSel.includes(l.linea_id)}
+                      onClick={e => { e.stopPropagation(); toggleLinea(l.linea_id); }}>
+                  {lineasSel.includes(l.linea_id) ? '✓' : ''}
                 </span>
                 <span className="lname">
                   <b>{l.nombre}</b>

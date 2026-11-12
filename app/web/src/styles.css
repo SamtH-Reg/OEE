@@ -881,3 +881,24 @@ header{
 }
 .armar-linea small{color:var(--muted);font-weight:500;font-size:12.5px}
 .armar-linea.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+
+/* selección individual de líneas para el proceso del turno */
+.proceso-nombre{
+  height:46px;border:1px solid var(--line);border-radius:11px;background:#fff;color:var(--ink);
+  font:14px inherit;padding:0 12px;width:100%;
+}
+.proceso-resumen{display:flex;align-items:center;justify-content:space-between;gap:8px;
+                  font-size:12.5px;color:var(--muted)}
+.proceso-resumen b{color:var(--ink);font-size:14px}
+.proceso-resumen em{font-style:normal;color:var(--dim)}
+.btn-guardar-proc{
+  height:38px;padding:0 14px;border-radius:10px;border:1px solid var(--accent);
+  background:var(--accent);color:#fff;font:600 13px inherit;cursor:pointer;
+}
+.btn-guardar-proc:disabled{opacity:.4;border-color:var(--line);background:var(--panel2);color:var(--dim);cursor:default}
+.line-check{
+  width:26px;height:26px;border-radius:8px;border:1.5px solid var(--line2);background:#fff;
+  display:grid;place-items:center;font-size:14px;font-weight:700;color:#fff;cursor:pointer;flex:0 0 auto;
+  margin-top:4px;
+}
+.line-check.on{background:var(--accent);border-color:var(--accent)}
