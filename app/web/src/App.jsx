@@ -665,7 +665,7 @@ export default function App() {
   }, [editor]);
 
   // ---- editor de trama ----
-  function abrirEditor(lineaParam) {
+  async function abrirEditor(lineaParam) {
     // si llega el evento del onClick en vez de una línea, se usa la que se está viendo
     const esLinea = lineaParam && typeof lineaParam === 'object'
       && (lineaParam.linea_id != null || lineaParam.id != null)
@@ -673,7 +673,20 @@ export default function App() {
     const linea = esLinea ? lineaParam : lineaActual;
     if (!linea) return;
     const lineaId = linea.linea_id ?? linea.id;
-    const filas = trama
+
+    // Traer la trama fresca: si se editó el nombre de un equipo en Ajustes, la
+    // tarjeta tiene que mostrarlo (el estado del tablero puede venir de antes).
+    let fuente = trama;
+    try {
+      const [lin, tab] = await Promise.all([api.lineas(), api.tablero()]);
+      fuente = lin.trama;
+      setTrama(lin.trama);
+      setLineas(lin.lineas);
+      setConexiones(lin.conexiones || []);
+      setMaqs(tab.maquinas);
+    } catch { /* sin red: se usa lo que hay en memoria */ }
+
+    const filas = fuente
       .filter(t => t.linea_id === lineaId)
       .sort((a, b) => a.posicion - b.posicion)
       .map(t => ({
@@ -1325,7 +1338,7 @@ export default function App() {
                 const st = estadoLinea(l);
                 return (
                   <button key={l.linea_id} className={`line-item compacto ${sel === l.linea_id ? 'on' : ''}`}
-                          onClick={() => setSel(l.linea_id)}>
+                          onClick={() => { setSel(l.linea_id); refrescar(); }}>
                     <span className="lname">
                       <b>{l.nombre}</b>
                       <small>

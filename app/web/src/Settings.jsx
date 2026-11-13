@@ -85,7 +85,14 @@ export default function Settings({ onClose, onTrama, onSaved }) {
       if (tipo === 'linea') {
         r = item ? await api.editarLinea(item.id, valores) : await api.crearLinea(valores);
       } else if (tipo === 'maquina') {
-        r = item ? await api.editarMaquina(item.id, valores) : await api.crearMaquina(valores);
+        // Si cambió el nombre y no tocó el nombre corto, se sincroniza: el corto
+        // es el que se ve en la tarjeta de la trama, si no parece que no se guardó.
+        const v = { ...valores };
+        if (item && (v.nombre_corto ?? '') === (item.nombre_corto ?? '')
+            && v.nombre !== item.nombre) {
+          v.nombre_corto = String(v.nombre || '').slice(0, 40);
+        }
+        r = item ? await api.editarMaquina(item.id, v) : await api.crearMaquina(v);
       } else {
         r = item ? await api.editarReceta(item.id, valores) : await api.crearReceta(valores);
         const recetaId = item ? item.id : r.id;
