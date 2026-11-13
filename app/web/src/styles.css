@@ -1081,3 +1081,11 @@ header{
 }
 .tf-sug-chip.out{border-style:solid}
 .tf-sug-chip:hover{background:#fff}
+
+/* buscador de equipos en Ajustes */
+.set-busca{
+  flex:0 1 320px;height:46px;border:1px solid var(--line2);border-radius:12px;background:#fff;
+  color:var(--ink);font:14px inherit;padding:0 14px;
+}
+.set-busca:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+.set-empty{padding:16px 4px;color:var(--muted);font-size:14px}

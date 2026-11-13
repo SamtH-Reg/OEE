@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from './api';
 import WizardLinea from './WizardLinea';
 
+const normalizar = (t) =>
+  (t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
 const vacio = {
   linea: { codigo: '', nombre: '', descripcion: '', activa: true, especie_id: '', producto_id: '' },
   maquina: { area_id: '', codigo: '', nombre: '', nombre_corto: '', criticidad: 2, activa: true, causas: [] },
@@ -28,6 +31,7 @@ export default function Settings({ onClose, onTrama, onSaved }) {
   const [areasEdit, setAreasEdit] = useState(null);
   const [borrar, setBorrar] = useState(null);
   const [borrarLinea, setBorrarLinea] = useState(null);
+  const [buscaEquipo, setBuscaEquipo] = useState('');   // buscador de la pestaña Equipos
   const [copiar, setCopiar] = useState(null);
   const [copiarMaq, setCopiarMaq] = useState(null);
   const [aviso, setAviso] = useState(null);
@@ -404,32 +408,76 @@ export default function Settings({ onClose, onTrama, onSaved }) {
           <>
             <div className="set-bar">
               <span className="set-count">{data.maquinas.length} equipos en {data.areas.length} áreas</span>
+              <input className="set-busca" placeholder="Buscar equipo…" value={buscaEquipo}
+                     aria-label="Buscar equipo"
+                     onChange={e => setBuscaEquipo(e.target.value)} />
+              {buscaEquipo && (
+                <button className="btn-ghost" onClick={() => setBuscaEquipo('')}>Limpiar</button>
+              )}
               <button className="btn-ghost" onClick={abrirAreas}>Áreas</button>
               <button className="btn-add" onClick={() => abrir('maquina')}>＋ Nuevo equipo</button>
             </div>
-            {data.areas.map(a => {
-              const ms = data.maquinas.filter(m => m.area_id === a.id);
-              if (!ms.length) return null;
-              return (
-                <div key={a.id} className="set-group">
-                  <div className="group-h">{a.nombre} <em>{ms.length}</em></div>
-                  <div className="set-list">
-                    {ms.map(m => (
-                      <div className={`set-row ${m.activa ? '' : 'off'}`} key={m.id}>
-                        <div className="grow">
-                          <b>{m.nombre}</b>
-                          <small>{m.nombre_corto} · criticidad {m.criticidad}{m.activa ? '' : ' · inactiva'}</small>
+            {(() => {
+              const q = normalizar(buscaEquipo);
+              const filtradas = q
+                ? data.maquinas.filter(m => normalizar(`${m.nombre} ${m.nombre_corto}`).includes(q))
+                : data.maquinas;
+              if (q) {
+                return (
+                  <>
+                    <p className="set-hint">
+                      {filtradas.length} de {data.maquinas.length} equipos coinciden con «{buscaEquipo}».
+                    </p>
+                    {filtradas.length === 0 && (
+                      <div className="set-empty">Ningún equipo con ese nombre.</div>
+                    )}
+                    <div className="set-list">
+                      {filtradas.map(m => {
+                        const area = data.areas.find(a => a.id === m.area_id);
+                        return (
+                          <div className={`set-row ${m.activa ? '' : 'off'}`} key={m.id}>
+                            <div className="grow">
+                              <b>{m.nombre}</b>
+                              <small>
+                                {area ? `${area.nombre} · ` : ''}{m.nombre_corto} · criticidad {m.criticidad}
+                                {m.activa ? '' : ' · inactiva'}
+                              </small>
+                            </div>
+                            <button className="btn-ghost" onClick={() => abrir('maquina', m)}>Editar</button>
+                            <button className="btn-ghost" onClick={() => abrirCopiarMaquina(m)}>Copiar</button>
+                            <button className="btn-ghost danger"
+                                    onClick={() => setBorrar({ ...m, paradas: m.paradas || 0 })}>Eliminar</button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                );
+              }
+              return data.areas.map(a => {
+                const ms = data.maquinas.filter(m => m.area_id === a.id);
+                if (!ms.length) return null;
+                return (
+                  <div key={a.id} className="set-group">
+                    <div className="group-h">{a.nombre} <em>{ms.length}</em></div>
+                    <div className="set-list">
+                      {ms.map(m => (
+                        <div className={`set-row ${m.activa ? '' : 'off'}`} key={m.id}>
+                          <div className="grow">
+                            <b>{m.nombre}</b>
+                            <small>{m.nombre_corto} · criticidad {m.criticidad}{m.activa ? '' : ' · inactiva'}</small>
+                          </div>
+                          <button className="btn-ghost" onClick={() => abrir('maquina', m)}>Editar</button>
+                          <button className="btn-ghost" onClick={() => abrirCopiarMaquina(m)}>Copiar</button>
+                          <button className="btn-ghost danger"
+                                  onClick={() => setBorrar({ ...m, paradas: m.paradas || 0 })}>Eliminar</button>
                         </div>
-                        <button className="btn-ghost" onClick={() => abrir('maquina', m)}>Editar</button>
-                        <button className="btn-ghost" onClick={() => abrirCopiarMaquina(m)}>Copiar</button>
-                        <button className="btn-ghost danger"
-                                onClick={() => setBorrar({ ...m, paradas: m.paradas || 0 })}>Eliminar</button>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              });
+            })()}
           </>
         )}
 

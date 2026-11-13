@@ -447,15 +447,37 @@ const slug = (t) => String(t || '')
   .slice(0, 18) || 'EQ';
 
 async function nombreMaquinaUnico(client, areaId, base) {
-  let nombre = base, n = 1;
-  while (n < 90) {
-    const r = await client.query(
-      'select 1 from maquinas where area_id = $1 and nombre = $2', [areaId, nombre]);
-    if (!r.rowCount) return nombre;
-    n += 1;
-    nombre = `${base} ${n}`;
+  const limpio = texto(base, 80) || 'EQUIPO';
+  const libre = async (n) => !(await client.query(
+    'select 1 from maquinas where area_id = $1 and lower(nombre) = lower($2)', [areaId, n])).rowCount;
+  if (await libre(limpio)) return limpio;
+  // si el nombre ya trae número, se sigue la serie (LINEA 1 → LINEA 2); si no, 2, 3…
+  const m = /^(.*?)[\s-]*(\d+)$/.exec(limpio);
+  const raiz = m ? m[1].trim() : limpio.replace(/\s*\(copia\)\s*$/i, '').trim();
+  let k = m ? Number(m[2]) + 1 : 2;
+  while (k < 500) {
+    const cand = `${raiz} ${k}`;
+    if (await libre(cand)) return cand;
+    k += 1;
   }
-  return `${base} ${Date.now().toString().slice(-4)}`;
+  return `${raiz} ${Date.now().toString().slice(-4)}`;
+}
+
+// Mismo criterio para el nombre corto: dos equipos del área no pueden llamarse igual.
+async function cortoMaquinaUnico(client, areaId, base) {
+  const limpio = texto(base, 40) || 'EQUIPO';
+  const libre = async (n) => !(await client.query(
+    'select 1 from maquinas where area_id = $1 and lower(nombre_corto) = lower($2)', [areaId, n])).rowCount;
+  if (await libre(limpio)) return limpio;
+  const m = /^(.*?)[\s-]*(\d+)$/.exec(limpio);
+  const raiz = m ? m[1].trim() : limpio;
+  let k = m ? Number(m[2]) + 1 : 2;
+  while (k < 500) {
+    const cand = `${raiz} ${k}`;
+    if (await libre(cand)) return cand;
+    k += 1;
+  }
+  return `${raiz} ${Date.now().toString().slice(-4)}`;
 }
 
 // 23505 puede ser el código o el nombre dentro del área: hay que distinguirlos.
@@ -512,13 +534,15 @@ app.post('/api/lineas/:id/copiar', async (req, reply) => {
       if (duplicar) {
         const m = await client.query('select * from maquinas where id = $1', [t.maquina_id]);
         const M = m.rows[0];
-        const cod = await codigoUnico('maquinas', slug(`${M.nombre_corto || M.nombre}${sufijo}`));
+        const nombreNuevo = await nombreMaquinaUnico(client, M.area_id, `${M.nombre}${sufijo}`);
+        const cortoNuevo = await cortoMaquinaUnico(client, M.area_id, `${M.nombre_corto}${sufijo}`);
+        const cod = await codigoUnico('maquinas', slug(cortoNuevo));
         const nm = await client.query(
           `insert into maquinas (area_id, codigo, nombre, nombre_corto, criticidad, orden, activa)
            values ($1, $2, $3, $4, $5,
                    (select coalesce(max(orden), 0) + 1 from maquinas where area_id = $1), true)
            returning id`,
-          [M.area_id, cod, `${M.nombre}${sufijo}`, `${M.nombre_corto}${sufijo}`, M.criticidad]);
+          [M.area_id, cod, nombreNuevo, cortoNuevo, M.criticidad]);
         maquinaId = nm.rows[0].id;
         await client.query(
           `insert into maquina_causas (maquina_id, codigo_causa_id)
@@ -689,14 +713,18 @@ app.post('/api/maquinas', async (req, reply) => {
   const client = await pool.connect();
   try {
     await client.query('begin');
-    const code = codigo(b.codigo) || await codigoUnico('maquinas', slug(b.nombre_corto || b.nombre));
+    // cada equipo es único: si el nombre ya existe en el área, se numera solo
+    const nombre = await nombreMaquinaUnico(client, b.area_id, texto(b.nombre));
+    const corto = await cortoMaquinaUnico(client, b.area_id,
+      texto(b.nombre_corto, 40) || nombre);
+    const code = codigo(b.codigo) || await codigoUnico('maquinas', slug(corto));
     const r = await client.query(
       `insert into maquinas (area_id, codigo, nombre, nombre_corto, criticidad, orden, activa)
        values ($1, $2, $3, $4, coalesce($5, 2),
                coalesce($6, (select coalesce(max(orden), 0) + 1 from maquinas where area_id = $1)),
                coalesce($7, true))
        returning *`,
-      [b.area_id, code, texto(b.nombre), texto(b.nombre_corto, 40) || texto(b.nombre, 20),
+      [b.area_id, code, nombre, corto,
        b.criticidad ?? 2, b.orden ?? 0, b.activa ?? true]);
     await guardarCausasMaquina(client, r.rows[0].id, b.causas);
     await client.query('commit');
@@ -756,14 +784,15 @@ app.post('/api/maquinas/:id/copiar', async (req, reply) => {
     const base = texto(b.nombre, 80) || `${M.nombre} (copia)`;
     // dentro de un área el nombre es único: si ya existe, se numera solo
     const nombre = await nombreMaquinaUnico(client, areaDestino, base);
+    const corto = await cortoMaquinaUnico(client, areaDestino,
+      texto(b.nombre_corto, 40) || `${M.nombre_corto} (copia)`);
     const code = codigo(b.codigo) || await codigoUnico('maquinas', slug(nombre));
     const r = await client.query(
       `insert into maquinas (area_id, codigo, nombre, nombre_corto, criticidad, orden, activa)
        values ($1, $2, $3, $4, $5,
                (select coalesce(max(orden), 0) + 1 from maquinas where area_id = $1), $6)
        returning *`,
-      [areaDestino, code, nombre,
-       texto(b.nombre_corto, 40) || `${M.nombre_corto} (copia)`, M.criticidad, M.activa]);
+      [areaDestino, code, nombre, corto, M.criticidad, M.activa]);
 
     if (b.copiar_fallas !== false) {
       await client.query(
