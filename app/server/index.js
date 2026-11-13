@@ -1327,6 +1327,18 @@ app.post('/api/turnos/cerrar', async (req, reply) => {
   }
 });
 
+// Reabrir el turno (si se cerró por error): vuelve a aceptar registros y abre
+// un corte de proceso nuevo, para que el reloj no siga congelado en el cierre.
+app.post('/api/turnos/reabrir', async () => {
+  const r = await q('update turnos set cerrado = false where id = fn_turno_para(now()) returning id, proceso_id, cerrado');
+  const t = r.rows[0];
+  if (!t) return { error: 'no hay turno activo' };
+  if (t.proceso_id) {
+    await q('select fn_registrar_proceso_turno($1, $2, $3)', [t.id, t.proceso_id, 'reapertura']);
+  }
+  return t;
+});
+
 // Proceso vigente del turno
 app.patch('/api/turnos/:id/proceso', async (req, reply) => {
   const b = req.body || {};

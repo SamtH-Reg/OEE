@@ -1350,3 +1350,11 @@ header{
 .an-serie.densa .an-dia{min-width:12px;flex:1}
 .an-serie.densa .an-dia small{font-size:9px;white-space:nowrap}
 .an-serie.densa{overflow:hidden}
+
+/* turno cerrado */
+.aviso.cerrado{display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+  background:var(--panel2);border-color:var(--line2);color:var(--ink)}
+.aviso.cerrado > span{flex:1;min-width:240px}
+.btn-detener-proceso:disabled,.btn-fin-turno:disabled,.ll-btn:disabled{
+  opacity:.45;cursor:default;
+}

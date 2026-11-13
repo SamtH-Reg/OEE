@@ -244,32 +244,38 @@ export default function App() {
   // Estado de una línea según lo que ve el operador (incluye paradas locales
   // todavía sin sincronizar).
   function estadoLinea(l) {
-    const enLinea = trama
-      .filter(t => t.linea_id === l.linea_id)
-      .map(t => maqs.find(m => m.id === t.maquina_id))
-      .filter(Boolean);
+    const propias = (trama || []).filter(t => t.linea_id === l.linea_id);
+    const nombresLinea = new Set(propias
+      .map(t => maqs.find(m => m.id === t.maquina_id)?.nombre_corto)
+      .filter(Boolean));
+    const evaluadas = propias
+      .map(t => ({ t, m: maqs.find(x => x.id === t.maquina_id) }))
+      .filter(x => x.m)
+      .map(x => ({ ...x, e: estadoDe(x.m) }))
+      // Las propias siempre cuentan; una cascada sólo si NACE dentro de esta línea
+      // (una cascada que viene de otra línea el tablero la pinta en verde, así que
+      // la cabecera no puede decir «parada parcial» con todas las tarjetas operando).
+      .filter(x => x.e.tipo === 'stop' || x.e.tipo === 'plan'
+        || (x.e.tipo === 'cascada' && nombresLinea.has(x.e.p?.origen)));
 
-    const activas = enLinea
-      .map(m => ({ m, e: estadoDe(m) }))
-      .filter(x => x.e.tipo !== 'run');
+    if (!evaluadas.length) return { estado: 'operando' };
 
-    if (!activas.length) return { estado: 'operando' };
-
-    const origen = activas.find(x => x.e.propia) || activas[0];
-    // «parada total» sólo si se detuvo el CUELLO de ESTA línea (una máquina
-    // puede ser cuello en otra línea y no en ésta; el alcance guardado no
-    // alcanza porque se resolvió con una sola línea)
-    const total = activas.some(x => x.e.propia && trama.some(t =>
-      t.linea_id === l.linea_id && t.maquina_id === x.m.id && t.detiene_linea));
+    const origen = evaluadas.find(x => x.e.tipo !== 'cascada') || evaluadas[0];
+    // «parada total» sólo si se detuvo el CUELLO de ESTA línea
+    const total = evaluadas.some(x => (x.e.tipo === 'stop' || x.e.tipo === 'plan') && x.t.detiene_linea);
     return {
       estado: total ? 'detenida' : 'parcial',
-      causa: origen.e.p.causa,
+      causa: origen.e.p?.causa,
       origen: origen.m.nombre_corto,
-      desde: origen.e.p.hora_inicio
+      desde: origen.e.p?.hora_inicio
     };
   }
 
   const procesoSel = procesos.find(p => p.id === procesoId) || null;
+
+  // Turno cerrado (fin de turno): no se registran paradas ni se arma otro proceso
+  // hasta reabrirlo. Evita el estado raro de «seguir operando» un turno cerrado.
+  const turnoCerrado = Boolean(cat?.turno?.cerrado);
 
   // Líneas ya guardadas en el turno (las que se pueden abrir para registrar fallas)
   const idsTurno = procesoSel?.lineas || [];
@@ -411,6 +417,10 @@ export default function App() {
   // Activar una línea ya armada. Si para eso hay que sacar del turno líneas que
   // están usando esos equipos, primero se avisa: nada se cierra a ciegas.
   function activarLinea(lineaId) {
+    if (turnoCerrado) {
+      setError('El turno está cerrado. Reabrilo para cambiar el armado.');
+      return;
+    }
     const equipos = new Set((trama || []).filter(t => t.linea_id === lineaId).map(t => t.maquina_id));
     const salen = lineasSel
       .filter(lid => (trama || []).some(t => t.linea_id === lid && equipos.has(t.maquina_id)))
@@ -491,33 +501,52 @@ export default function App() {
     }
   }
 
+  // Reabrir el turno si se cerró por error
+  async function reabrirTurno() {
+    try {
+      await api.reabrirTurno();
+      await refrescar();
+      setError(null);
+      setToast({ titulo: 'Turno reabierto', detalle: 'Se pueden registrar paradas otra vez' });
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
   // Tiempo de trabajo de la línea en el proceso actual: desde el corte abierto
   // (o el inicio del turno) hasta ahora, descontando lo que estuvo parada.
   function tiempoLinea(l) {
     if (!l) return null;
-    const corte = (monitor?.cortes || []).find(c => !c.hasta);
-    const desde = corte?.desde || monitor?.turno?.creado_en;
+    const cortes = monitor?.cortes || [];
+    // el corte abierto manda; si el turno ya se cerró, se toma el último corte y
+    // el reloj se congela en su «hasta» (si no, el tiempo vuelve a 0)
+    const ref = cortes.find(c => !c.hasta) || cortes[0];
+    const desde = ref?.desde || monitor?.turno?.creado_en;
     if (!desde) return null;
     const ini = new Date(desde).getTime();
-    const ahoraMs = ahora;
-    const total = Math.max(0, Math.round((ahoraMs - ini) / 60000));
+    const fin = ref?.hasta ? new Date(ref.hasta).getTime() : ahora;
+    const total = Math.max(0, Math.round((fin - ini) / 60000));
     const maquinas = new Set((trama || [])
       .filter(t => t.linea_id === l.linea_id).map(t => t.maquina_id));
     let paradaMs = 0;
     for (const p of (monitor?.paradas || [])) {
       if (!maquinas.has(p.maquina_id)) continue;
       const a = Math.max(new Date(p.hora_inicio).getTime(), ini);
-      const b = Math.min(p.hora_fin ? new Date(p.hora_fin).getTime() : ahoraMs, ahoraMs);
+      const b = Math.min(p.hora_fin ? new Date(p.hora_fin).getTime() : ahora, fin);
       if (b > a) paradaMs += b - a;
     }
     const parada = Math.min(total, Math.round(paradaMs / 60000));
-    return { total, parada, trabajo: Math.max(0, total - parada) };
+    return { total, parada, trabajo: Math.max(0, total - parada), cerrado: Boolean(ref?.hasta) };
   }
 
   // Detener el proceso completo: la parada va sobre el cuello de la línea (o su
   // Eventualidades), que por definición arrastra toda la línea.
   function detenerProceso() {
     if (!lineaActual) return;
+    if (turnoCerrado) {
+      setError('El turno está cerrado. Reabrilo para detener el proceso.');
+      return;
+    }
     const propias = (trama || []).filter(t => t.linea_id === lineaActual.linea_id);
     const cuello = propias.find(t => t.detiene_linea);
     const even = propias.find(t => (maqs.find(m => m.id === t.maquina_id)?.nombre_corto || '')
@@ -741,6 +770,10 @@ export default function App() {
   // ---- acciones ----
   function tocar(m, est) {
     if (!cat) return;
+    if (turnoCerrado) {
+      setError('El turno está cerrado. Reabrilo si necesitás registrar una parada.');
+      return;
+    }
     setError(null);
     if (est.tipo === 'run') setSheet({ tipo: 'categorias', maquina: m });
     else setSheet({ tipo: 'reanudar', maquina: m, parada: est.p, propia: est.propia });
@@ -1492,6 +1525,15 @@ export default function App() {
       {sinRed && (
         <div className="aviso off">Sin conexión · los registros quedan en la tablet y se envían al volver la red</div>
       )}
+      {turnoCerrado && (
+        <div className="aviso cerrado">
+          <span>
+            Turno cerrado{cat?.turno ? ` · ${cat.turno.nombre}` : ''} · no se registran paradas ni se cambia el armado
+          </span>
+          <button className="aviso-btn" onClick={reabrirTurno}>Reabrir turno</button>
+        </div>
+      )}
+
       {error && (
         <div className="aviso error">
           <span>{error}</span>
@@ -1558,7 +1600,7 @@ export default function App() {
             )}
 
             <button className="btn-guardar-proc ancho" onClick={guardarProcesoTurno}
-                    disabled={!lineasSel.length || !cambiosPendientes}>
+                    disabled={!lineasSel.length || !cambiosPendientes || turnoCerrado}>
               {cambiosPendientes ? 'Guardar cambios' : 'Guardado'}
             </button>
           </div>
@@ -1604,7 +1646,8 @@ export default function App() {
                         {choca.length > 0 ? ` · reemplaza a ${choca.join(', ')}` : ' · no choca con el turno'}
                       </small>
                     </div>
-                    <button className="ll-btn" onClick={() => activarLinea(l.linea_id)}>Activar</button>
+                    <button className="ll-btn" onClick={() => activarLinea(l.linea_id)}
+                            disabled={turnoCerrado}>Activar</button>
                   </div>
                 );
               })}
@@ -1646,17 +1689,19 @@ export default function App() {
                   return (
                     <span className="ln-tiempos">
                       <b>{fmtMin(t.trabajo)} de trabajo</b>
-                      <em>{fmtMin(t.total)} desde el corte · {fmtMin(t.parada)} en parada</em>
+                      <em>{fmtMin(t.total)} desde el corte · {fmtMin(t.parada)} en parada{t.cerrado ? ' · proceso cerrado' : ''}</em>
                     </span>
                   );
                 })()}
 
                 <div className="ln-acciones">
                   <button className="btn-detener-proceso" onClick={detenerProceso}
+                          disabled={turnoCerrado}
                           title="Registra una parada sobre el cuello de la línea: se detiene todo el proceso">
                     ■ Detener el proceso
                   </button>
                   <button className="btn-fin-turno" onClick={() => setConfirmarCierre(true)}
+                          disabled={turnoCerrado}
                           title="Fine de turno: detiene las líneas armadas con la causa «Fin de turno» y cierra el proceso">
                     ⏹ Fin de turno
                   </button>
