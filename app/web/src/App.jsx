@@ -25,6 +25,8 @@ const ICONOS = {
 const sinTildes = (t) =>
   (t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
+const hhmm = (iso) => new Date(iso).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
+
 const fmtMin = (m) => {
   const min = Math.max(0, Math.round(m || 0));
   if (min < 60) return `${min} min`;
@@ -1606,6 +1608,28 @@ export default function App() {
                   {!perdidas.porCausa.length && <small className="mon-vacio">Sin paradas en el turno</small>}
                 </div>
               </div>
+
+              {(monitor?.cortes || []).length > 0 && (
+                <div className="mon-card mon-cortes">
+                  <span>Cortes del proceso</span>
+                  {monitor.cortes.map(c => (
+                    <div className={`mon-corte ${c.hasta ? '' : 'abierto'}`} key={c.id}>
+                      <span className="mc-horas">
+                        {hhmm(c.desde)} – {c.hasta ? hhmm(c.hasta) : 'ahora'}
+                      </span>
+                      <span className="mc-lineas">
+                        {(c.lineas || []).map(l => l.nombre).join('  +  ') || 'sin proceso'}
+                      </span>
+                      <span className="mc-min">
+                        {fmtMin(c.minutos)}{c.hasta ? '' : ' · en curso'}
+                      </span>
+                      <span className="mc-perd">
+                        {c.perdidos > 0 ? `${fmtMin(c.perdidos)} perdidos` : 'sin paradas'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               <div className="mon-pie">
                 Actualizado {monitor?.ahora

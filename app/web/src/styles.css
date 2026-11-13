@@ -1160,3 +1160,17 @@ header{
   background:var(--accent);color:#fff;font:600 13px inherit;cursor:pointer;flex:0 0 auto;
 }
 .ll-btn:hover{filter:brightness(1.06)}
+
+/* cortes de proceso del turno (monitor) */
+.mon-cortes{grid-column:1 / -1}
+.mon-corte{
+  display:grid;grid-template-columns:150px minmax(0,1fr) 130px 130px;align-items:center;gap:14px;
+  padding:10px 4px;border-top:1px solid var(--line);font-size:13px;
+}
+.mon-corte:first-of-type{margin-top:10px}
+.mon-corte .mc-horas{font-weight:600;color:var(--ink);white-space:nowrap}
+.mon-corte .mc-lineas{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mon-corte .mc-min{text-align:right;color:var(--ink);font-weight:600}
+.mon-corte .mc-perd{text-align:right;color:var(--muted)}
+.mon-corte.abierto .mc-horas{color:var(--accent)}
+.mon-corte.abierto .mc-min{color:var(--accent)}

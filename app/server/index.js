@@ -1098,7 +1098,23 @@ app.get('/api/monitor', async () => {
       join codigos_causa c on c.id = p.codigo_causa_id
      where p.turno_id = $1 and p.estado <> 'anulada'
      order by p.hora_inicio desc`, [turno.id]);
-  return { turno, paradas: p.rows, ahora };
+  // Cortes de proceso del turno: desde/hasta de cada configuración, con los
+  // minutos que estuvo y los minutos perdidos dentro de ese período.
+  const c = await q(`
+    select c.id, c.desde, c.hasta, c.lineas,
+           greatest(0, round(extract(epoch from (coalesce(c.hasta, now()) - c.desde)) / 60))::int as minutos,
+           coalesce((
+             select round(sum(greatest(0, extract(epoch from (
+                        least(coalesce(p.hora_fin, now()), coalesce(c.hasta, now()))
+                        - greatest(p.hora_inicio, c.desde)))) / 60))
+               from registro_paradas p
+              where p.turno_id = c.turno_id and p.estado <> 'anulada'
+                and p.hora_inicio < coalesce(c.hasta, now())
+           ), 0)::int as perdidos
+      from turno_procesos c
+     where c.turno_id = $1
+     order by c.desde desc`, [turno.id]);
+  return { turno, paradas: p.rows, cortes: c.rows, ahora };
 });
 
 // Lista de procesos para el operador
@@ -1130,6 +1146,9 @@ app.patch('/api/turnos/:id/proceso', async (req, reply) => {
     const r = await q('update turnos set proceso_id = $2 where id = $1 returning id, proceso_id',
       [req.params.id, b.proceso_id ?? null]);
     if (!r.rowCount) return reply.code(404).send({ error: 'turno no existe' });
+    // corte de proceso: cierra el período anterior y abre el nuevo con su foto
+    await q('select fn_registrar_proceso_turno($1, $2, $3)',
+      [req.params.id, b.proceso_id ?? null, b.usuario ?? null]);
     return r.rows[0];
   } catch (e) {
     return reply.code(400).send({ error: e.message });
