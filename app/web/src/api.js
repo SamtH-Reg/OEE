@@ -57,5 +57,6 @@ export const api = {
     return req('/api/analisis' + (qs.toString() ? '?' + qs.toString() : ''));
   },
   accionParada: (id, b) => req(`/api/paradas/${id}/acciones`, { method: 'POST', body: JSON.stringify(b) }),
+  quitarSimulacion: () => req('/api/simulacion', { method: 'DELETE' }),
   historial: (q = '') => req('/api/historial' + q)
 };

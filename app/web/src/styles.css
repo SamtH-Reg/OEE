@@ -1344,3 +1344,9 @@ header{
   .an-card{break-inside:avoid;box-shadow:none}
   .an-grid{grid-template-columns:1fr 1fr}
 }
+
+/* serie densa: 30 días entran sin scroll */
+.an-serie.densa{gap:4px;height:210px}
+.an-serie.densa .an-dia{min-width:12px;flex:1}
+.an-serie.densa .an-dia small{font-size:9px;white-space:nowrap}
+.an-serie.densa{overflow:hidden}

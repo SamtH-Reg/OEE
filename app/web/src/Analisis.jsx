@@ -43,6 +43,9 @@ export default function Analisis({ onClose }) {
   const [anotando, setAnotando] = useState(null);  // parada donde se anota
   const [form, setForm] = useState({ tipo: 'reparacion', detalle: '', responsable: '' });
   const [guardando, setGuardando] = useState(false);
+  const [avisoSim, setAvisoSim] = useState(null);
+  const [todosEquipos, setTodosEquipos] = useState(false);
+  const [todasCausas, setTodasCausas] = useState(false);
 
   async function cargar() {
     setCargando(true);
@@ -142,6 +145,18 @@ export default function Analisis({ onClose }) {
     URL.revokeObjectURL(a.href);
   }
 
+  async function quitarSimulacion() {
+    if (!window.confirm('¿Borrar las paradas de la simulación? Los registros reales no se tocan.')) return;
+    try {
+      const r = await api.quitarSimulacion();
+      setEquipo(null);
+      await cargar();
+      setAvisoSim(`Se borraron ${r.borradas} paradas simuladas.`);
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
   async function guardarAccion() {
     if (!anotando || !form.detalle.trim()) return;
     setGuardando(true);
@@ -176,6 +191,13 @@ export default function Analisis({ onClose }) {
           </p>
         </div>
         <div className="an-acciones">
+          {data?.resumen?.simuladas > 0 && (
+            <button className="ghost"
+                    onClick={quitarSimulacion}
+                    title="Borra las paradas marcadas como SIMULACIÓN">
+              Quitar simulación ({data.resumen.simuladas})
+            </button>
+          )}
           <button className="ghost" onClick={exportarCSV} disabled={!data}>Exportar CSV</button>
           <button className="ghost" onClick={() => window.print()} disabled={!data}>Imprimir / PDF</button>
           <button className="x" onClick={onClose} aria-label="Cerrar">✕</button>
@@ -202,6 +224,7 @@ export default function Analisis({ onClose }) {
       </div>
 
       {error && <div className="aviso error">{error}</div>}
+      {avisoSim && <div className="aviso">{avisoSim}</div>}
       {cargando && !data && <div className="an-cargando">Cargando análisis…</div>}
 
       {data && (
@@ -245,7 +268,7 @@ export default function Analisis({ onClose }) {
                 <table className="an-tabla compacta">
                   <thead><tr><th>Causa</th><th>Paradas</th><th>Min</th><th>%</th><th>Acum.</th></tr></thead>
                   <tbody>
-                    {data.porCausa.map(c => (
+                    {(todasCausas ? data.porCausa : data.porCausa.slice(0, 10)).map(c => (
                       <tr key={'t' + c.causa + c.categoria}>
                         <td>{c.causa}</td><td>{c.paradas}</td><td>{c.minutos}</td>
                         <td>{c.pct}%</td><td>{c.acum}%</td>
@@ -253,6 +276,11 @@ export default function Analisis({ onClose }) {
                     ))}
                   </tbody>
                 </table>
+              )}
+              {data.porCausa.length > 10 && (
+                <button className="an-link" onClick={() => setTodasCausas(v => !v)}>
+                  {todasCausas ? 'ver menos' : `ver las ${data.porCausa.length} causas`}
+                </button>
               )}
             </section>
 
@@ -264,7 +292,7 @@ export default function Analisis({ onClose }) {
                   <tr><th>Equipo</th><th>Área</th><th>Paradas</th><th>Tiempo</th><th>Última</th><th></th></tr>
                 </thead>
                 <tbody>
-                  {data.porEquipo.slice(0, 12).map(e => (
+                  {(todosEquipos ? data.porEquipo : data.porEquipo.slice(0, 12)).map(e => (
                     <tr key={e.maquina_id}>
                       <td>
                         <b>{e.nombre}</b>
@@ -284,6 +312,11 @@ export default function Analisis({ onClose }) {
                   ))}
                 </tbody>
               </table>
+              {data.porEquipo.length > 12 && (
+                <button className="an-link" onClick={() => setTodosEquipos(v => !v)}>
+                  {todosEquipos ? 'ver menos' : `ver los ${data.porEquipo.length}`}
+                </button>
+              )}
             </section>
 
             <section className="an-card">
@@ -316,14 +349,14 @@ export default function Analisis({ onClose }) {
               <span>Tendencia por día</span>
               {dias.length === 0 && <p className="an-vacio">Sin paradas en el rango.</p>}
               {dias.length > 0 && (
-                <div className="an-serie">
-                  {dias.map(d => (
+                <div className={`an-serie ${dias.length > 15 ? 'densa' : ''}`}>
+                  {dias.map((d, i) => (
                     <div className="an-dia" key={d.dia} title={`${d.dia}: ${fmt(d.minutos)} · ${d.paradas} paradas`}>
                       <div className="an-dia-barra">
                         <i style={{ height: `${Math.max(4, (d.minutos / maxDia) * 100)}%` }} />
                       </div>
-                      <small>{d.dia.slice(8, 10)}/{d.dia.slice(5, 7)}</small>
-                      <em>{d.minutos}</em>
+                      <small>{dias.length <= 15 || i % 5 === 0 ? `${d.dia.slice(8, 10)}/${d.dia.slice(5, 7)}` : ''}</small>
+                      {dias.length <= 15 && <em>{d.minutos}</em>}
                     </div>
                   ))}
                 </div>

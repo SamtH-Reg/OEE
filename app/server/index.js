@@ -1216,6 +1216,8 @@ app.get('/api/analisis', async (req) => {
               count(*) filter (where p.estado = 'activa')::int as abiertas,
               count(distinct p.maquina_id)::int as equipos,
               coalesce(max(${min}) filter (where not cc.es_planificada), 0)::int as peor
+              , count(*) filter (where p.origen = 'importado'
+                                 and p.comentarios_operador = 'SIMULACIÓN')::int as simuladas
          ${base}`, params),
     q(`select cc.descripcion as causa, cg.nombre as categoria, cc.es_planificada,
               count(*)::int as paradas, coalesce(sum(${min}), 0)::int as minutos
@@ -1278,6 +1280,13 @@ app.get('/api/analisis', async (req) => {
     historial: historial.rows,
     lineas: lineas.rows
   };
+});
+
+// Borra los datos simulados (sólo los marcados como SIMULACIÓN)
+app.delete('/api/simulacion', async () => {
+  const r = await q(`delete from registro_paradas
+                      where origen = 'importado' and comentarios_operador = 'SIMULACIÓN'`);
+  return { ok: true, borradas: r.rowCount };
 });
 
 // Anotar una acción sobre una parada (reparación, cambio de equipo, ajuste…)
