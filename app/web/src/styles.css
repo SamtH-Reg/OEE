@@ -1215,3 +1215,10 @@ header{
   color:#A82C2C;font:600 13.5px inherit;cursor:pointer;
 }
 .btn-detener-proceso:hover{background:var(--stop-bg)}
+
+/* fin de turno */
+.btn-fin-turno{
+  height:44px;padding:0 16px;border-radius:10px;border:1px solid var(--line2);background:#fff;
+  color:var(--ink);font:600 13.5px inherit;cursor:pointer;
+}
+.btn-fin-turno:hover{background:var(--panel2)}

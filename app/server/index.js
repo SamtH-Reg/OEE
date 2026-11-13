@@ -63,7 +63,7 @@ app.get('/api/catalogo', async () => {
     q('select id, codigo, nombre, icono, color from categorias_falla where activa order by orden'),
     q(`select id, categoria_id, codigo, descripcion, es_planificada, requiere_comentario, direccion
          from codigos_causa where activo order by categoria_id, descripcion`),
-    q(`select t.id, t.fecha, t.nombre, t.supervisor, t.proceso_id,
+    q(`select t.id, t.fecha, t.nombre, t.supervisor, t.proceso_id, t.cerrado,
               r.nombre as proceso
          from turnos t
          left join recetas r on r.id = t.proceso_id
@@ -1129,7 +1129,7 @@ app.get('/api/recetas/:id/proceso', async (req, reply) => {
 
 // Monitor del turno: sólo lectura, para la pantalla de planta (sin escrituras)
 app.get('/api/monitor', async () => {
-  const t = await q(`select t.id, t.fecha, t.nombre, t.supervisor, t.creado_en, r.nombre as proceso
+  const t = await q(`select t.id, t.fecha, t.nombre, t.supervisor, t.creado_en, t.cerrado, r.nombre as proceso
                        from turnos t left join recetas r on r.id = t.proceso_id
                       where t.id = fn_turno_para(now())`);
   const turno = t.rows[0] || null;
@@ -1177,6 +1177,18 @@ app.get('/api/procesos', async () => {
     return { ...p, lineas: [...new Set(lineas)] };
   });
   return { procesos };
+});
+
+// Cerrar el turno (fin de turno): detiene las líneas armadas con la causa
+// «Fin de turno», cierra el corte de proceso abierto y marca el turno cerrado.
+app.post('/api/turnos/cerrar', async (req, reply) => {
+  const b = req.body || {};
+  try {
+    const r = await q('select fn_cerrar_turno(fn_turno_para(now()), $1) as r', [b.usuario ?? null]);
+    return r.rows[0].r;
+  } catch (e) {
+    return reply.code(400).send({ error: e.message });
+  }
 });
 
 // Proceso vigente del turno

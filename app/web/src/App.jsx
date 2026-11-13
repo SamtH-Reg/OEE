@@ -63,6 +63,7 @@ export default function App() {
   const [lineaRapida, setLineaRapida] = useState(null);    // { equipos: [] } panel de línea nueva
   const [conflictoEquipos, setConflictoEquipos] = useState([]);  // equipos repetidos del último guardado
   const [confirmarActivacion, setConfirmarActivacion] = useState(null);  // aviso al sacar líneas del turno
+  const [confirmarCierre, setConfirmarCierre] = useState(false);         // aviso de fin de turno
   const [picker, setPicker] = useState(false);             // panel interactivo para agregar
   const [pickerBuscar, setPickerBuscar] = useState('');
   const flowRef = useRef(null);
@@ -444,6 +445,23 @@ export default function App() {
         titulo: 'Línea activada',
         detalle: `${conf.nombre} · salió ${conf.salen.map(s => s.nombre).join(' y ')}`
       });
+    }
+  }
+
+  // Fin de turno: detiene las líneas armadas con la causa «Fin de turno»,
+  // cierra el corte de proceso y deja el turno cerrado.
+  async function cerrarTurno() {
+    setConfirmarCierre(false);
+    try {
+      const r = await api.cerrarTurno();
+      await refrescar();
+      api.monitor().then(setMonitor).catch(() => {});
+      setToast({
+        titulo: 'Turno cerrado',
+        detalle: `${r?.paradas || 0} línea${(r?.paradas || 0) === 1 ? '' : 's'} detenida${(r?.paradas || 0) === 1 ? '' : 's'} por fin de turno`
+      });
+    } catch (e) {
+      setError(e.message);
     }
   }
 
@@ -1442,6 +1460,7 @@ export default function App() {
             <b>Tablero de Planta</b>
             <span>
               {cat?.turno ? `${cat.turno.nombre} · ${cat.turno.supervisor}` : 'Sin turno activo'}
+              {cat?.turno?.cerrado ? ' · CERRADO' : ''}
               {lineasSel.length ? ` · ${lineasSel.length} ${lineasSel.length === 1 ? 'línea' : 'líneas'}` : ''}
             </span>
           </div>
@@ -1631,6 +1650,10 @@ export default function App() {
                   <button className="btn-detener-proceso" onClick={detenerProceso}
                           title="Registra una parada sobre el cuello de la línea: se detiene todo el proceso">
                     ■ Detener el proceso
+                  </button>
+                  <button className="btn-fin-turno" onClick={() => setConfirmarCierre(true)}
+                          title="Fine de turno: detiene las líneas armadas con la causa «Fin de turno» y cierra el proceso">
+                    ⏹ Fin de turno
                   </button>
                   {procesoId && (
                     <button className="volver-planta" onClick={() => setSel('p:' + procesoId)}>
@@ -1845,6 +1868,26 @@ export default function App() {
               reanudar(sheet.maquina, sheet.parada, txt);
             }}>▶ Reanudar operación</button>
             <textarea id="comment" className="comment" placeholder="Comentario (opcional)" />
+          </div>
+        </div>
+      )}
+
+      {/* Aviso de fin de turno */}
+      {confirmarCierre && (
+        <div className="confirma-capa" onClick={() => setConfirmarCierre(false)}>
+          <div className="confirma" onClick={e => e.stopPropagation()}>
+            <h3>¿Cerrar el turno?</h3>
+            <p>
+              Se registra la parada <b>Fin de turno</b> en las líneas armadas que estén operando
+              (no cuenta como tiempo perdido), se cierra el corte de proceso y el turno queda cerrado.
+            </p>
+            <p className="confirma-nota">
+              Después se elige el armado del turno siguiente como siempre.
+            </p>
+            <div className="confirma-acciones">
+              <button className="ghost" onClick={() => setConfirmarCierre(false)}>Cancelar</button>
+              <button className="btn-go small" onClick={cerrarTurno}>Sí, cerrar el turno</button>
+            </div>
           </div>
         </div>
       )}
