@@ -471,6 +471,48 @@ export default function App() {
     }
   }
 
+  // Tiempo de trabajo de la línea en el proceso actual: desde el corte abierto
+  // (o el inicio del turno) hasta ahora, descontando lo que estuvo parada.
+  function tiempoLinea(l) {
+    if (!l) return null;
+    const corte = (monitor?.cortes || []).find(c => !c.hasta);
+    const desde = corte?.desde || monitor?.turno?.creado_en;
+    if (!desde) return null;
+    const ini = new Date(desde).getTime();
+    const ahoraMs = ahora;
+    const total = Math.max(0, Math.round((ahoraMs - ini) / 60000));
+    const maquinas = new Set((trama || [])
+      .filter(t => t.linea_id === l.linea_id).map(t => t.maquina_id));
+    let paradaMs = 0;
+    for (const p of (monitor?.paradas || [])) {
+      if (!maquinas.has(p.maquina_id)) continue;
+      const a = Math.max(new Date(p.hora_inicio).getTime(), ini);
+      const b = Math.min(p.hora_fin ? new Date(p.hora_fin).getTime() : ahoraMs, ahoraMs);
+      if (b > a) paradaMs += b - a;
+    }
+    const parada = Math.min(total, Math.round(paradaMs / 60000));
+    return { total, parada, trabajo: Math.max(0, total - parada) };
+  }
+
+  // Detener el proceso completo: la parada va sobre el cuello de la línea (o su
+  // Eventualidades), que por definición arrastra toda la línea.
+  function detenerProceso() {
+    if (!lineaActual) return;
+    const propias = (trama || []).filter(t => t.linea_id === lineaActual.linea_id);
+    const cuello = propias.find(t => t.detiene_linea);
+    const even = propias.find(t => (maqs.find(m => m.id === t.maquina_id)?.nombre_corto || '')
+      .startsWith('Eventualidades'));
+    const elegida = cuello || even || propias[0];
+    if (!elegida) return;
+    const m = maqs.find(x => x.id === elegida.maquina_id);
+    if (!m) return;
+    setSheet({
+      tipo: 'categorias',
+      maquina: { ...m, linea_id: lineaActual.linea_id, posicion: elegida.posicion,
+                 detiene_linea: Boolean(cuello) }
+    });
+  }
+
   // Con un proceso elegido, el tablero muestra solo las máquinas de sus líneas
   const maqsVisibles = useMemo(() => {
     if (!lineasSel.length) return maqs;
@@ -493,7 +535,8 @@ export default function App() {
       estado: st.estado,
       causa: st.causa,
       origen: st.origen,
-      tiempo: st.estado === 'operando' ? '' : (minutos(st.desde, ahora) === '0 min' ? 'recién' : minutos(st.desde, ahora))
+      tiempo: st.estado === 'operando' ? '' : (minutos(st.desde, ahora) === '0 min' ? 'recién' : minutos(st.desde, ahora)),
+      trabajo: (tiempoLinea(l) || {}).trabajo
     };
   });
 
@@ -1572,11 +1615,29 @@ export default function App() {
                     ? 'Línea operando'
                     : `${estadoLinea(lineaActual).estado === 'detenida' ? 'Parada total' : 'Parada parcial'} · ${estadoLinea(lineaActual).causa} · desde ${estadoLinea(lineaActual).origen}`}
                 </span>
-                {procesoId && (
-                  <button className="volver-planta" onClick={() => setSel('p:' + procesoId)}>
-                    ← Tablero en vivo
+
+                {(() => {
+                  const t = tiempoLinea(lineaActual);
+                  if (!t) return null;
+                  return (
+                    <span className="ln-tiempos">
+                      <b>{fmtMin(t.trabajo)} de trabajo</b>
+                      <em>{fmtMin(t.total)} desde el corte · {fmtMin(t.parada)} en parada</em>
+                    </span>
+                  );
+                })()}
+
+                <div className="ln-acciones">
+                  <button className="btn-detener-proceso" onClick={detenerProceso}
+                          title="Registra una parada sobre el cuello de la línea: se detiene todo el proceso">
+                    ■ Detener el proceso
                   </button>
-                )}
+                  {procesoId && (
+                    <button className="volver-planta" onClick={() => setSel('p:' + procesoId)}>
+                      ← Tablero en vivo
+                    </button>
+                  )}
+                </div>
               </div>
               <div className="flow split">
                 {columnasLinea.map((col, ci) => (
@@ -1623,7 +1684,7 @@ export default function App() {
                       <b>{f.estado === 'operando' ? 'Operando' : f.estado === 'detenida' ? 'Parada total' : 'Parada parcial'}</b>
                       <small>
                         {f.estado === 'operando'
-                          ? `${f.maquinas} máquinas`
+                          ? `${f.maquinas} máquinas · ${fmtMin(f.trabajo || 0)} de trabajo`
                           : `${f.causa}${f.origen ? ` · ${f.origen}` : ''} · ${f.tiempo}`}
                       </small>
                     </span>

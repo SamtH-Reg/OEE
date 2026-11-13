@@ -1129,7 +1129,7 @@ app.get('/api/recetas/:id/proceso', async (req, reply) => {
 
 // Monitor del turno: sólo lectura, para la pantalla de planta (sin escrituras)
 app.get('/api/monitor', async () => {
-  const t = await q(`select t.id, t.fecha, t.nombre, t.supervisor, r.nombre as proceso
+  const t = await q(`select t.id, t.fecha, t.nombre, t.supervisor, t.creado_en, r.nombre as proceso
                        from turnos t left join recetas r on r.id = t.proceso_id
                       where t.id = fn_turno_para(now())`);
   const turno = t.rows[0] || null;
