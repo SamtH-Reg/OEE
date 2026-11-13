@@ -7,6 +7,7 @@ import { api } from './api';
 import { arrancarSync } from './sync';
 import Settings from './Settings';
 import LineaRapida from './LineaRapida';
+import Analisis from './Analisis';
 
 const nf = new Intl.NumberFormat('es-CL');
 
@@ -57,6 +58,7 @@ export default function App() {
   const [cerradas, setCerradas] = useState([]); // uuids cerrados en esta sesión
 
   const [ajustes, setAjustes] = useState(false);
+  const [analisis, setAnalisis] = useState(false);
   const [sheet, setSheet] = useState(null);
   const [editor, setEditor] = useState(null);
   const [seleccionada, setSeleccionada] = useState(null);  // tarjeta elegida en el editor
@@ -1474,6 +1476,9 @@ export default function App() {
           <span>{pend === 0 ? 'sin pendientes' : `${pend} ${pend === 1 ? 'pendiente' : 'pendientes'}`}</span>
         </div>
 
+        <button className="gear" onClick={() => setAnalisis(true)} title="Análisis de paradas" aria-label="Análisis">
+          <svg viewBox="0 0 24 24"><path d="M4 20V11M9.5 20V5M15 20v-6M20.5 20V8" /></svg>
+        </button>
         <button className="gear" onClick={() => setAjustes(true)} title="Ajustes de planta" aria-label="Ajustes">
           <svg viewBox="0 0 24 24">{ICONOS.engranaje && <path d={ICONOS.engranaje} />}</svg>
         </button>
@@ -1924,6 +1929,8 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {analisis && <Analisis onClose={() => setAnalisis(false)} />}
 
       {lineaRapida && (
         <LineaRapida

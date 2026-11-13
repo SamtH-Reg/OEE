@@ -51,5 +51,11 @@ export const api = {
   setProcesoTurno: (turnoId, procesoId) =>
     req(`/api/turnos/${turnoId}/proceso`, { method: 'PATCH', body: JSON.stringify({ proceso_id: procesoId }) }),
   cerrarTurno: () => req('/api/turnos/cerrar', { method: 'POST', body: JSON.stringify({}) }),
+  analisis: (p = {}) => {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(p)) if (v) qs.set(k, v);
+    return req('/api/analisis' + (qs.toString() ? '?' + qs.toString() : ''));
+  },
+  accionParada: (id, b) => req(`/api/paradas/${id}/acciones`, { method: 'POST', body: JSON.stringify(b) }),
   historial: (q = '') => req('/api/historial' + q)
 };

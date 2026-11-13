@@ -1179,6 +1179,133 @@ app.get('/api/procesos', async () => {
   return { procesos };
 });
 
+// ---------------- análisis de paradas ----------------
+// Panel de análisis: resumen, Pareto por causa, por equipo, por línea, por día,
+// por turno e historial de paradas con sus acciones (reparación/cambio de equipo).
+app.get('/api/analisis', async (req) => {
+  const qs = req.query || {};
+  const desde = qs.desde ? new Date(qs.desde) : new Date(new Date().setHours(0, 0, 0, 0));
+  const hasta = qs.hasta ? new Date(qs.hasta) : new Date();
+  const params = [desde.toISOString(), hasta.toISOString()];
+  let filtro = '';
+  if (qs.linea_id) { params.push(Number(qs.linea_id)); filtro += ` and p.linea_id = $${params.length}`; }
+  if (qs.maquina_id) { params.push(Number(qs.maquina_id)); filtro += ` and p.maquina_id = $${params.length}`; }
+
+  const base = `
+    from registro_paradas p
+    join maquinas m on m.id = p.maquina_id
+    join areas a on a.id = m.area_id
+    join codigos_causa cc on cc.id = p.codigo_causa_id
+    join categorias_falla cg on cg.id = cc.categoria_id
+    left join lineas l on l.id = p.linea_id
+    left join turnos tu on tu.id = p.turno_id
+   where p.estado <> 'anulada'
+     and p.hora_inicio >= $1 and p.hora_inicio < $2 ${filtro}`;
+  // El Pareto y los totales son de tiempo PERDIDO: las paradas planificadas
+  // (fin de turno, lavados) se informan aparte y no ensucian las causas.
+  const baseReal = `${base} and not cc.es_planificada`;
+  const min = `round(extract(epoch from (coalesce(p.hora_fin, now()) - p.hora_inicio)) / 60)::int`;
+
+  const [resumen, porCausa, porEquipo, porLinea, porDia, porTurno, historial, lineas] = await Promise.all([
+    q(`select count(*) filter (where not cc.es_planificada)::int as paradas,
+              coalesce(sum(${min}) filter (where not cc.es_planificada), 0)::int as minutos,
+              count(*)::int as paradas_total,
+              coalesce(sum(${min}), 0)::int as minutos_total,
+              count(*) filter (where cc.es_planificada)::int as planificadas,
+              coalesce(sum(${min}) filter (where cc.es_planificada), 0)::int as minutos_planificados,
+              count(*) filter (where p.estado = 'activa')::int as abiertas,
+              count(distinct p.maquina_id)::int as equipos,
+              coalesce(max(${min}) filter (where not cc.es_planificada), 0)::int as peor
+         ${base}`, params),
+    q(`select cc.descripcion as causa, cg.nombre as categoria, cc.es_planificada,
+              count(*)::int as paradas, coalesce(sum(${min}), 0)::int as minutos
+         ${baseReal}
+        group by 1, 2, 3
+        order by minutos desc, paradas desc`, params),
+    q(`select p.maquina_id, m.nombre_corto as nombre, m.nombre as nombre_largo, a.nombre as area,
+              string_agg(distinct l.nombre, ' / ') as lineas,
+              count(*)::int as paradas, coalesce(sum(${min}), 0)::int as minutos,
+              max(p.hora_inicio) as ultima
+         ${baseReal}
+        group by p.maquina_id, m.nombre_corto, m.nombre, a.nombre
+        order by minutos desc, paradas desc`, params),
+    q(`select p.linea_id, coalesce(l.nombre, 'sin línea') as nombre,
+              count(*)::int as paradas, coalesce(sum(${min}), 0)::int as minutos
+         ${baseReal}
+        group by p.linea_id, l.nombre order by minutos desc`, params),
+    q(`select to_char(p.hora_inicio at time zone 'America/Punta_Arenas', 'YYYY-MM-DD') as dia,
+              count(*)::int as paradas, coalesce(sum(${min}), 0)::int as minutos
+         ${baseReal}
+        group by 1 order by 1`, params),
+    q(`select coalesce(tu.nombre, '—') as turno, count(*)::int as paradas,
+              coalesce(sum(${min}), 0)::int as minutos
+         ${baseReal}
+        group by 1 order by 1`, params),
+    q(`select p.id, p.maquina_id, m.nombre_corto as maquina, a.nombre as area,
+              l.nombre as linea, cc.descripcion as causa, cg.nombre as categoria,
+              cc.es_planificada, p.estado, p.hora_inicio, p.hora_fin,
+              ${min} as minutos, p.comentarios_operador as comentario,
+              coalesce((
+                select json_agg(json_build_object('id', x.id, 'tipo', x.tipo, 'detalle', x.detalle,
+                                                  'responsable', x.responsable, 'ocurrido_en', x.ocurrido_en)
+                                order by x.ocurrido_en)
+                  from parada_acciones x where x.parada_id = p.id
+              ), '[]'::json) as acciones
+         ${base}
+        order by p.hora_inicio desc
+        limit 400`, params),
+    q('select id, nombre from lineas order by orden, nombre')
+  ]);
+
+  const total = resumen.rows[0].minutos || 0;
+  let acum = 0;
+  const pareto = porCausa.rows.map(r => {
+    const pct = total ? Math.round((r.minutos / total) * 100) : 0;
+    acum += pct;
+    return { ...r, pct, acum: Math.min(100, acum) };
+  });
+
+  return {
+    rango: { desde: desde.toISOString(), hasta: hasta.toISOString(),
+             linea_id: qs.linea_id ? Number(qs.linea_id) : null,
+             maquina_id: qs.maquina_id ? Number(qs.maquina_id) : null },
+    resumen: resumen.rows[0],
+    porCausa: pareto,
+    porEquipo: porEquipo.rows,
+    porLinea: porLinea.rows,
+    porDia: porDia.rows,
+    porTurno: porTurno.rows,
+    historial: historial.rows,
+    lineas: lineas.rows
+  };
+});
+
+// Anotar una acción sobre una parada (reparación, cambio de equipo, ajuste…)
+app.post('/api/paradas/:id/acciones', async (req, reply) => {
+  const b = req.body || {};
+  const paradaId = Number(req.params.id);
+  const tipos = ['reparacion', 'cambio_equipo', 'ajuste', 'otro'];
+  if (!Number.isInteger(paradaId)) return reply.code(400).send({ error: 'parada inválida' });
+  const tipo = tipos.includes(b.tipo) ? b.tipo : 'reparacion';
+  if (!texto(b.detalle)) return reply.code(400).send({ error: 'contá qué se hizo' });
+  try {
+    const r = await q(
+      `insert into parada_acciones (parada_id, tipo, detalle, responsable)
+       values ($1, $2, $3, $4) returning *`,
+      [paradaId, tipo, texto(b.detalle, 500), texto(b.responsable, 80)]);
+    return r.rows[0];
+  } catch (e) {
+    return reply.code(400).send({ error: e.message });
+  }
+});
+
+// Lista de acciones de una parada (se usa desde el historial)
+app.get('/api/paradas/:id/acciones', async (req) => {
+  const r = await q('select * from parada_acciones where parada_id = $1 order by ocurrido_en desc',
+    [Number(req.params.id)]);
+  return { acciones: r.rows };
+});
+
 // Cerrar el turno (fin de turno): detiene las líneas armadas con la causa
 // «Fin de turno», cierra el corte de proceso abierto y marca el turno cerrado.
 app.post('/api/turnos/cerrar', async (req, reply) => {
