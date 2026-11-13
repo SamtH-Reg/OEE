@@ -6,6 +6,7 @@ import {
 import { api } from './api';
 import { arrancarSync } from './sync';
 import Settings from './Settings';
+import LineaRapida from './LineaRapida';
 
 const nf = new Intl.NumberFormat('es-CL');
 
@@ -57,6 +58,8 @@ export default function App() {
   const [sheet, setSheet] = useState(null);
   const [editor, setEditor] = useState(null);
   const [seleccionada, setSeleccionada] = useState(null);  // tarjeta elegida en el editor
+  const [lineaRapida, setLineaRapida] = useState(null);    // { equipos: [] } panel de línea nueva
+  const [conflictoEquipos, setConflictoEquipos] = useState([]);  // equipos repetidos del último guardado
   const [picker, setPicker] = useState(false);             // panel interactivo para agregar
   const [pickerBuscar, setPickerBuscar] = useState('');
   const flowRef = useRef(null);
@@ -283,21 +286,51 @@ export default function App() {
     return [...dueno.entries()]
       .filter(([, ls]) => new Set(ls).size > 1)
       .map(([maq, ls]) => ({
+        id: maq,
         maquina: nombreMaq.get(maq) || `equipo ${maq}`,
         lineas: [...new Set(ls)].map(x => nombreLinea.get(x) || `línea ${x}`)
       }));
+  }
+
+  // Armar una línea en el momento desde el tablero: crea la línea, deja la trama
+  // en el orden elegido y abre el editor para conectar los bloques.
+  async function crearLineaDesdeTablero({ nombre, equipos }) {
+    const r = await api.crearLinea({ nombre });
+    const lineaId = r.linea_id ?? r.id;
+    if (!lineaId) throw new Error('no se pudo crear la línea');
+    await api.guardarTrama(lineaId, equipos.map((id, i) => ({
+      maquina_id: id, posicion: i + 2, rama: 1, detiene_linea: false, fin_linea: false
+    })), []);
+    const [lin, proc] = await Promise.all([api.lineas(), api.procesos()]);
+    setLineas(lin.lineas);
+    setTrama(lin.trama);
+    setConexiones(lin.conexiones || []);
+    setProcesos(proc.procesos || []);
+    setLineaRapida(null);
+    setConflictoEquipos([]);
+    setError(null);
+    // queda marcada para el turno: se confirma con «Guardar cambios»
+    setLineasSel(prev => (prev.includes(lineaId) ? prev : [...prev, lineaId]));
+    setToast({
+      titulo: 'Línea creada',
+      detalle: `${nombre} · ${equipos.length} equipos — conectá los bloques y guardá el turno`
+    });
+    const nueva = (lin.lineas || []).find(l => l.linea_id === lineaId) || { linea_id: lineaId, nombre };
+    abrirEditor(nueva);
   }
 
   async function guardarProcesoTurno() {
     const rep = conflictosDeTurno(lineasSel);
     if (rep.length) {
       const partes = rep.slice(0, 5).map(x => `${x.maquina} en ${x.lineas.join(' y ')}`);
+      setConflictoEquipos(rep.map(x => x.id));
       setError('Estas líneas comparten equipos: ' + partes.join('; ') +
         (rep.length > 5 ? ` y ${rep.length - 5} más` : '') +
         '. Un equipo no puede estar en dos líneas armadas al mismo tiempo: detené su proceso en la ' +
         'primera línea o dejá una sola de las dos en el turno.');
       return;
     }
+    setConflictoEquipos([]);
     try {
       let id = procesoId;
       if (!id) {
@@ -1274,7 +1307,17 @@ export default function App() {
       {sinRed && (
         <div className="aviso off">Sin conexión · los registros quedan en la tablet y se envían al volver la red</div>
       )}
-      {error && <div className="aviso error">{error}</div>}
+      {error && (
+        <div className="aviso error">
+          <span>{error}</span>
+          {conflictoEquipos.length > 0 && (
+            <button className="aviso-btn"
+                    onClick={() => setLineaRapida({ equipos: conflictoEquipos })}>
+              Armar una línea nueva con esos equipos
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="layout">
         <aside className="side">
@@ -1292,6 +1335,11 @@ export default function App() {
                 </small>
               </span>
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9.5 6 6 6-6" /></svg>
+            </button>
+
+            <button className="btn-linea-nueva"
+                    onClick={() => { setPicker(false); setLineaRapida({ equipos: [] }); }}>
+              ＋ Armar línea nueva
             </button>
 
             {lineasAbierto && (
@@ -1574,6 +1622,19 @@ export default function App() {
             <textarea id="comment" className="comment" placeholder="Comentario (opcional)" />
           </div>
         </div>
+      )}
+
+      {lineaRapida && (
+        <LineaRapida
+          areas={cat?.areas || []}
+          maquinas={maqs}
+          trama={trama}
+          lineas={lineas}
+          armadas={idsTurno}
+          inicial={lineaRapida.equipos || []}
+          onClose={() => setLineaRapida(null)}
+          onCrear={crearLineaDesdeTablero}
+        />
       )}
 
       {editor && (

@@ -189,7 +189,7 @@ app.put('/api/lineas/:id/trama', async (req, reply) => {
     // manda, se conserva en su posición (no se pierde al guardar la trama).
     const ever = await client.query(
       `select lm.* from linea_maquinas lm join maquinas m on m.id = lm.maquina_id
-        where lm.linea_id = $1 and m.nombre_corto = 'Eventualidades' limit 1`, [lineaId]);
+        where lm.linea_id = $1 and m.nombre_corto like 'Eventualidades%' limit 1`, [lineaId]);
 
     await client.query('delete from linea_maquinas where linea_id = $1', [lineaId]);
     for (let i = 0; i < maquinas.length; i++) {
