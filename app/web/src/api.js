@@ -21,6 +21,8 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ maquinas, conexiones: conexiones || [] })
     }),
+  moverEquipo: (lineaId, b) =>
+    req(`/api/lineas/${lineaId}/mover-equipo`, { method: 'POST', body: JSON.stringify(b) }),
   sync: (body) => req('/api/sync', { method: 'POST', body: JSON.stringify(body) }),
   settings: () => req('/api/settings'),
   crearLinea: (b) => req('/api/lineas', { method: 'POST', body: JSON.stringify(b) }),

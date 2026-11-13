@@ -150,6 +150,53 @@ function mensajeTurnoConRepetidos(rep) {
     'primera línea o queda una sola de las dos en el turno.';
 }
 
+// Mover un equipo de una línea a otra: el equipo cambia de proceso, no se duplica.
+app.post('/api/lineas/:id/mover-equipo', async (req, reply) => {
+  const desde = Number(req.params.id);
+  const b = req.body || {};
+  const maq = Number(b.maquina_id);
+  const dest = Number(b.destino_id);
+  if (!Number.isInteger(desde) || !Number.isInteger(maq) || !Number.isInteger(dest)) {
+    return reply.code(400).send({ error: 'faltan datos para mover el equipo' });
+  }
+  if (dest === desde) return reply.code(400).send({ error: 'es la misma línea' });
+
+  const activa = await q(`select 1 from registro_paradas where maquina_id = $1 and estado = 'activa' limit 1`, [maq]);
+  if (activa.rowCount) {
+    return reply.code(409).send({ error: 'ese equipo tiene una parada en curso: reanudá la operación antes de moverlo' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('begin');
+    const ya = await client.query('select 1 from linea_maquinas where linea_id = $1 and maquina_id = $2', [dest, maq]);
+    if (ya.rowCount) {
+      await client.query('rollback');
+      return reply.code(409).send({ error: 'el equipo ya está en esa línea' });
+    }
+    const del = await client.query(
+      'delete from linea_maquinas where linea_id = $1 and maquina_id = $2 returning maquina_id', [desde, maq]);
+    if (!del.rowCount) {
+      await client.query('rollback');
+      return reply.code(404).send({ error: 'el equipo no está en esa línea' });
+    }
+    await client.query(
+      `delete from linea_conexiones
+        where linea_id = $1 and (desde_maquina_id = $2 or hasta_maquina_id = $2)`, [desde, maq]);
+    await client.query(
+      `insert into linea_maquinas (linea_id, maquina_id, posicion, rama, detiene_linea, fin_linea)
+       values ($1, $2, (select coalesce(max(posicion), 0) + 1 from linea_maquinas where linea_id = $1), 1, false, false)`,
+      [dest, maq]);
+    await client.query('commit');
+    return { ok: true, desde, destino: dest, maquina_id: maq };
+  } catch (e) {
+    await client.query('rollback');
+    return reply.code(400).send({ error: e.message });
+  } finally {
+    client.release();
+  }
+});
+
 // Reemplaza la trama completa de una línea (orden + cuello de botella).
 app.put('/api/lineas/:id/trama', async (req, reply) => {
   const lineaId = Number(req.params.id);

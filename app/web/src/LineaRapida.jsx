@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { api } from './api';
 
-// Arma una línea en el momento: nombre + equipos elegidos en orden.
+// Arma una línea en el momento: nombre, especie/producto y equipos en orden.
 // Nace con su tarjeta de Eventualidades (la pone el servidor) y después se abre
 // el editor de trama para conectar los bloques como se vayan a usar.
 
@@ -8,13 +9,23 @@ const normalizar = (t) =>
   (t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
 export default function LineaRapida({
-  areas, maquinas, trama, lineas, armadas = [], inicial = [], onClose, onCrear
+  areas, maquinas, trama, lineas, armadas = [], inicial = [],
+  especies = [], productos = [], onClose, onCrear
 }) {
   const [nombre, setNombre] = useState('');
   const [busca, setBusca] = useState('');
   const [sel, setSel] = useState(inicial);
+  const [especie, setEspecie] = useState('');
+  const [producto, setProducto] = useState('');
+  const [listaEsp, setListaEsp] = useState(especies);
+  const [listaProd, setListaProd] = useState(productos);
+  const [nuevo, setNuevo] = useState(null);   // {tipo: 'especie'|'producto', nombre}
   const [error, setError] = useState(null);
   const [creando, setCreando] = useState(false);
+
+  // el catálogo llega después de abrir el panel: se sincroniza al recibirlo
+  useEffect(() => { setListaEsp(especies); }, [especies]);
+  useEffect(() => { setListaProd(productos); }, [productos]);
 
   const grupos = useMemo(() => {
     const q = normalizar(busca.trim());
@@ -41,12 +52,35 @@ export default function LineaRapida({
     setSel(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   }
 
+  async function crearCatalogo() {
+    if (!nuevo || !nuevo.nombre.trim()) return;
+    try {
+      const creado = nuevo.tipo === 'especie'
+        ? await api.crearEspecie({ nombre: nuevo.nombre.trim() })
+        : await api.crearProducto({ nombre: nuevo.nombre.trim() });
+      if (nuevo.tipo === 'especie') {
+        setListaEsp(prev => [...prev, creado]);
+        setEspecie(String(creado.id));
+      } else {
+        setListaProd(prev => [...prev, creado]);
+        setProducto(String(creado.id));
+      }
+      setNuevo(null);
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
   async function crear() {
     if (!nombre.trim() || !sel.length) return;
     setCreando(true);
     setError(null);
     try {
-      await onCrear({ nombre: nombre.trim(), equipos: sel });
+      await onCrear({
+        nombre: nombre.trim(), equipos: sel,
+        especie_id: especie ? Number(especie) : null,
+        producto_id: producto ? Number(producto) : null
+      });
     } catch (e) {
       setError(e.message);
       setCreando(false);
@@ -70,6 +104,43 @@ export default function LineaRapida({
             <input value={nombre} onChange={e => setNombre(e.target.value)}
                    placeholder="LINEA 4" autoFocus />
           </label>
+
+          <div className="lr-clasif">
+            <label className="lr-campo">
+              Especie
+              <span className="lr-select">
+                <select value={especie} onChange={e => setEspecie(e.target.value)}>
+                  <option value="">Sin especie</option>
+                  {listaEsp.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
+                </select>
+                <button type="button" title="Nueva especie"
+                        onClick={() => setNuevo({ tipo: 'especie', nombre: '' })}>＋</button>
+              </span>
+            </label>
+            <label className="lr-campo">
+              Producto
+              <span className="lr-select">
+                <select value={producto} onChange={e => setProducto(e.target.value)}>
+                  <option value="">Sin producto</option>
+                  {listaProd.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                </select>
+                <button type="button" title="Nuevo producto"
+                        onClick={() => setNuevo({ tipo: 'producto', nombre: '' })}>＋</button>
+              </span>
+            </label>
+          </div>
+
+          {nuevo && (
+            <div className="lr-nuevo">
+              <span>{nuevo.tipo === 'especie' ? 'Nueva especie' : 'Nuevo producto'}</span>
+              <input value={nuevo.nombre} autoFocus placeholder="Nombre"
+                     onChange={e => setNuevo({ ...nuevo, nombre: e.target.value })}
+                     onKeyDown={e => { if (e.key === 'Enter') crearCatalogo(); }} />
+              <button className="btn-go small" onClick={crearCatalogo}
+                      disabled={!nuevo.nombre.trim()}>Crear</button>
+              <button className="ghost" onClick={() => setNuevo(null)}>Cancelar</button>
+            </div>
+          )}
 
           <div className="lr-busca">
             <input placeholder="Buscar equipo…" value={busca}

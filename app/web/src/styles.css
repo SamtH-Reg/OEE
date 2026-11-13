@@ -1174,3 +1174,32 @@ header{
 .mon-corte .mc-perd{text-align:right;color:var(--muted)}
 .mon-corte.abierto .mc-horas{color:var(--accent)}
 .mon-corte.abierto .mc-min{color:var(--accent)}
+
+/* aviso al activar una línea que reemplaza a otra en funcionamiento */
+.confirma-capa{
+  position:fixed;inset:0;z-index:90;background:rgba(15,27,39,.38);
+  display:grid;place-items:center;padding:20px;
+}
+.confirma{
+  width:min(520px,100%);background:var(--panel);border-radius:16px;padding:22px 24px;
+  box-shadow:0 30px 70px -30px rgba(15,27,39,.65);
+}
+.confirma h3{margin:0 0 8px;font-size:21px;letter-spacing:-.2px}
+.confirma p{margin:0 0 12px;color:var(--muted);font-size:14px;line-height:1.45}
+.confirma-lista{list-style:none;margin:0 0 12px;padding:0;display:flex;flex-direction:column;gap:8px}
+.confirma-lista li{
+  display:flex;align-items:baseline;justify-content:space-between;gap:12px;
+  background:var(--stop-bg);border:1px solid #F2C9C4;border-radius:11px;padding:10px 12px;
+}
+.confirma-lista b{font-size:14.5px;color:#98271E}
+.confirma-lista small{color:#A8524A;font-size:12.5px}
+.confirma-nota{font-size:12.5px;color:var(--dim)}
+.confirma-acciones{display:flex;justify-content:flex-end;gap:10px;margin-top:16px}
+
+/* mover un equipo a otra línea desde el editor */
+.tf-mover{display:flex;flex-direction:column;gap:4px;margin-top:6px}
+.tf-mover span{font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:var(--dim);font-weight:700}
+.tf-mover select{
+  height:34px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);
+  font:12.5px inherit;padding:0 8px;
+}

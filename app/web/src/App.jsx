@@ -62,6 +62,7 @@ export default function App() {
   const [seleccionada, setSeleccionada] = useState(null);  // tarjeta elegida en el editor
   const [lineaRapida, setLineaRapida] = useState(null);    // { equipos: [] } panel de línea nueva
   const [conflictoEquipos, setConflictoEquipos] = useState([]);  // equipos repetidos del último guardado
+  const [confirmarActivacion, setConfirmarActivacion] = useState(null);  // aviso al sacar líneas del turno
   const [picker, setPicker] = useState(false);             // panel interactivo para agregar
   const [pickerBuscar, setPickerBuscar] = useState('');
   const flowRef = useRef(null);
@@ -307,8 +308,8 @@ export default function App() {
 
   // Armar una línea en el momento desde el tablero: crea la línea, deja la trama
   // en el orden elegido y abre el editor para conectar los bloques.
-  async function crearLineaDesdeTablero({ nombre, equipos }) {
-    const r = await api.crearLinea({ nombre });
+  async function crearLineaDesdeTablero({ nombre, equipos, especie_id, producto_id }) {
+    const r = await api.crearLinea({ nombre, especie_id: especie_id ?? null, producto_id: producto_id ?? null });
     const lineaId = r.linea_id ?? r.id;
     if (!lineaId) throw new Error('no se pudo crear la línea');
     await api.guardarTrama(lineaId, equipos.map((id, i) => ({
@@ -392,23 +393,82 @@ export default function App() {
     }
   }
 
-  // Activar una línea ya armada: entra al turno y, si comparte equipos con alguna
-  // de las que están operando, esa sale del turno en el mismo movimiento.
-  async function activarLinea(lineaId) {
+  // Abre el panel de línea nueva con el catálogo de especie/producto cargado
+  async function abrirLineaRapida(equipos = []) {
+    setPicker(false);
+    setLineaRapida({ equipos, especies: [], productos: [], cargando: true });
+    try {
+      const s = await api.settings();
+      setLineaRapida({ equipos, especies: s.especies || [], productos: s.productos || [] });
+    } catch {
+      setLineaRapida({ equipos, especies: [], productos: [] });
+    }
+  }
+
+  // Activar una línea ya armada. Si para eso hay que sacar del turno líneas que
+  // están usando esos equipos, primero se avisa: nada se cierra a ciegas.
+  function activarLinea(lineaId) {
     const equipos = new Set((trama || []).filter(t => t.linea_id === lineaId).map(t => t.maquina_id));
-    const reemplaza = lineasSel.filter(lid =>
-      (trama || []).some(t => t.linea_id === lid && equipos.has(t.maquina_id)));
-    const seleccion = [...lineasSel.filter(lid => !reemplaza.includes(lid)), lineaId];
+    const salen = lineasSel
+      .filter(lid => (trama || []).some(t => t.linea_id === lid && equipos.has(t.maquina_id)))
+      .map(lid => {
+        const l = lineas.find(x => x.linea_id === lid);
+        const detenidas = (trama || [])
+          .filter(t => t.linea_id === lid)
+          .filter(t => {
+            const m = maqs.find(x => x.id === t.maquina_id);
+            return m && estadoDe(m).tipo !== 'run';
+          }).length;
+        return { id: lid, nombre: l ? l.nombre : `línea ${lid}`, detenidas };
+      });
     const nombre = lineas.find(l => l.linea_id === lineaId)?.nombre || 'La línea';
-    const ok = await guardarTurnoCon(seleccion);
-    if (!ok) return;
-    const salen = reemplaza
-      .map(lid => lineas.find(l => l.linea_id === lid)?.nombre)
-      .filter(Boolean);
-    setToast({
-      titulo: 'Línea activada',
-      detalle: `${nombre}${salen.length ? ` · sale ${salen.join(' y ')}` : ' · se sumó al turno'}`
+
+    if (salen.length) {
+      setConfirmarActivacion({ lineaId, nombre, salen });
+      return;
+    }
+    guardarTurnoCon([...lineasSel, lineaId]).then(ok => {
+      if (ok) setToast({ titulo: 'Línea activada', detalle: `${nombre} · se sumó al turno` });
     });
+  }
+
+  async function confirmarActivacionYGuardar() {
+    const conf = confirmarActivacion;
+    if (!conf) return;
+    setConfirmarActivacion(null);
+    const salenIds = conf.salen.map(s => s.id);
+    const seleccion = [...lineasSel.filter(lid => !salenIds.includes(lid)), conf.lineaId];
+    const ok = await guardarTurnoCon(seleccion);
+    if (ok) {
+      setToast({
+        titulo: 'Línea activada',
+        detalle: `${conf.nombre} · salió ${conf.salen.map(s => s.nombre).join(' y ')}`
+      });
+    }
+  }
+
+  // Mover un equipo de esta línea a otra (cambia de proceso, no se duplica)
+  async function moverEquipo(maquinaId, destinoId) {
+    if (!editor) return;
+    try {
+      await api.moverEquipo(editor.linea.linea_id, { maquina_id: maquinaId, destino_id: destinoId });
+      setEditor(prev => ({
+        ...prev,
+        filas: prev.filas.filter(f => f.maquina_id !== maquinaId),
+        conexiones: (prev.conexiones || []).filter(c =>
+          c.desde_maquina_id !== maquinaId && c.hasta_maquina_id !== maquinaId),
+        error: null
+      }));
+      setSeleccionada(prev => (prev === maquinaId ? null : prev));
+      const destino = lineas.find(l => l.linea_id === destinoId)?.nombre || 'la otra línea';
+      setToast({ titulo: 'Equipo movido', detalle: `${nombreCorto(maquinaId)} → ${destino}` });
+      const lin = await api.lineas();
+      setLineas(lin.lineas);
+      setTrama(lin.trama);
+      setConexiones(lin.conexiones || []);
+    } catch (e) {
+      setEditor(prev => ({ ...prev, error: e.message }));
+    }
   }
 
   // Con un proceso elegido, el tablero muestra solo las máquinas de sus líneas
@@ -1370,7 +1430,7 @@ export default function App() {
           <span>{error}</span>
           {conflictoEquipos.length > 0 && (
             <button className="aviso-btn"
-                    onClick={() => setLineaRapida({ equipos: conflictoEquipos })}>
+                    onClick={() => abrirLineaRapida(conflictoEquipos)}>
               Armar una línea nueva con esos equipos
             </button>
           )}
@@ -1396,7 +1456,7 @@ export default function App() {
             </button>
 
             <button className="btn-linea-nueva"
-                    onClick={() => { setPicker(false); setLineaRapida({ equipos: [] }); }}>
+                    onClick={() => abrirLineaRapida([])}>
               ＋ Armar línea nueva
             </button>
 
@@ -1728,6 +1788,39 @@ export default function App() {
         </div>
       )}
 
+      {/* Aviso antes de sacar del turno una línea que tiene equipos en funcionamiento */}
+      {confirmarActivacion && (
+        <div className="confirma-capa" onClick={() => setConfirmarActivacion(null)}>
+          <div className="confirma" onClick={e => e.stopPropagation()}>
+            <h3>Activar {confirmarActivacion.nombre}</h3>
+            <p>
+              Para activarla tienen que salir del turno las líneas que están usando esos mismos equipos:
+            </p>
+            <ul className="confirma-lista">
+              {confirmarActivacion.salen.map(s => (
+                <li key={s.id}>
+                  <b>{s.nombre}</b>
+                  <small>
+                    {s.detenidas > 0
+                      ? `${s.detenidas} equipo${s.detenidas === 1 ? '' : 's'} en parada ahora`
+                      : 'operando, sin paradas'}
+                  </small>
+                </li>
+              ))}
+            </ul>
+            <p className="confirma-nota">
+              Su proceso se cierra en este momento y queda registrado el corte de hora.
+            </p>
+            <div className="confirma-acciones">
+              <button className="ghost" onClick={() => setConfirmarActivacion(null)}>Cancelar</button>
+              <button className="btn-go small" onClick={confirmarActivacionYGuardar}>
+                Activar y cerrar {confirmarActivacion.salen.length === 1 ? 'esa línea' : 'esas líneas'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {lineaRapida && (
         <LineaRapida
           areas={cat?.areas || []}
@@ -1736,6 +1829,8 @@ export default function App() {
           lineas={lineas}
           armadas={idsTurno}
           inicial={lineaRapida.equipos || []}
+          especies={lineaRapida.especies || []}
+          productos={lineaRapida.productos || []}
           onClose={() => setLineaRapida(null)}
           onCrear={crearLineaDesdeTablero}
         />
@@ -1899,6 +1994,20 @@ export default function App() {
                         <input type="checkbox" checked={f.fin_linea}
                                onChange={() => alternarFin(f.maquina_id)} />
                         fin de línea
+                      </label>
+
+                      <label className="tf-mover">
+                        <span>Pasar a otra línea</span>
+                        <select value=""
+                                onChange={e => {
+                                  if (e.target.value) moverEquipo(f.maquina_id, Number(e.target.value));
+                                  e.currentTarget.value = '';
+                                }}>
+                          <option value="">Elegir línea…</option>
+                          {lineas
+                            .filter(l => l.linea_id !== editor.linea.linea_id)
+                            .map(l => <option key={l.linea_id} value={l.linea_id}>{l.nombre}</option>)}
+                        </select>
                       </label>
 
                       {/* sugerencias para enlazar sin buscar en los desplegables */}
