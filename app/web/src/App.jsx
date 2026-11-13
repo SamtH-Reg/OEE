@@ -21,6 +21,9 @@ const ICONOS = {
   camion: 'M2 7h11v9H2z M13 10h4l4 4v2h-8z M6 18.2a1.7 1.7 0 1 0 0 .1Z M17.5 18.2a1.7 1.7 0 1 0 0 .1Z'
 };
 
+const sinTildes = (t) =>
+  (t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+
 const fmtMin = (m) => {
   const min = Math.max(0, Math.round(m || 0));
   if (min < 60) return `${min} min`;
@@ -53,6 +56,9 @@ export default function App() {
   const [ajustes, setAjustes] = useState(false);
   const [sheet, setSheet] = useState(null);
   const [editor, setEditor] = useState(null);
+  const [seleccionada, setSeleccionada] = useState(null);  // tarjeta elegida en el editor
+  const [picker, setPicker] = useState(false);             // panel interactivo para agregar
+  const [pickerBuscar, setPickerBuscar] = useState('');
   const flowRef = useRef(null);
   const [links, setLinks] = useState([]);
   const [dims, setDims] = useState({ w: 0, h: 0 });
@@ -672,7 +678,7 @@ export default function App() {
       .sort((a, b) => a.posicion - b.posicion)
       .map(t => ({
         maquina_id: t.maquina_id, nombre_corto: t.nombre_corto,
-        area: t.area, detiene_linea: t.detiene_linea,
+        area: t.area, detiene_linea: t.detiene_linea, fin_linea: Boolean(t.fin_linea),
         posicion: t.posicion, rama: t.rama || 1,
         x: t.pos_x ?? 30 + ((t.posicion || 1) - 1) * 330,
         y: t.pos_y ?? 24 + ((t.rama || 1) - 1) * 300
@@ -680,6 +686,9 @@ export default function App() {
     const cons = (conexiones || [])
       .filter(c => c.linea_id === lineaId)
       .map(c => ({ desde_maquina_id: c.desde_maquina_id, hasta_maquina_id: c.hasta_maquina_id }));
+    setSeleccionada(null);
+    setPicker(false);
+    setPickerBuscar('');
     setEditor({ linea: { ...linea, linea_id: lineaId }, filas, conexiones: cons,
                 nueva: '', error: null, guardando: false });
   }
@@ -775,7 +784,7 @@ export default function App() {
       const etapa = etapaDe(f.x);
       if (!e && !sal) {
         out.push({ id: f.maquina_id, tipo: 'suelta', texto: `${f.nombre_corto}: sin conexiones` });
-      } else if (!sal && filas.length > 1) {
+      } else if (!sal && filas.length > 1 && !f.fin_linea) {
         out.push({ id: f.maquina_id, tipo: 'sin_salida', texto: `${f.nombre_corto}: no alimenta a ningún bloque` });
       } else if (!e && etapa > 1) {
         out.push({ id: f.maquina_id, tipo: 'sin_entrada', texto: `${f.nombre_corto}: está en la etapa ${etapa} y no recibe de nadie` });
@@ -1004,20 +1013,27 @@ export default function App() {
   const marcarCuello = (maquinaId) =>
     editar(filas => filas.map(f => ({ ...f, detiene_linea: f.maquina_id === maquinaId })));
 
-  function agregarMaquina() {
-    const id = Number(editor.nueva);
+  // fin de línea: la última tarjeta del proceso (puede no tener salidas)
+  const alternarFin = (maquinaId) =>
+    editar(filas => filas.map(f => f.maquina_id === maquinaId
+      ? { ...f, fin_linea: !f.fin_linea }
+      : f));
+
+  function agregarMaquina(idParam) {
+    const id = Number(idParam ?? editor?.nueva);
     if (!id) return;
     const m = maqs.find(x => x.id === id);
     if (!m) return;
+    if (editor.filas.some(f => f.maquina_id === m.id)) return;
     const maxPos = editor.filas.length ? Math.max(...editor.filas.map(f => f.posicion)) : 0;
-    const maxX = editor.filas.length ? Math.max(...editor.filas.map(f => f.x || 0)) : 0;
     const hueco = huecoParaNueva(editor.filas);
     editar(filas => renum([...filas, {
       maquina_id: m.id, nombre_corto: m.nombre_corto, area: m.area,
-      detiene_linea: false, posicion: maxPos + 1, rama: 1,
+      detiene_linea: false, fin_linea: false, posicion: maxPos + 1, rama: 1,
       x: hueco.x, y: hueco.y
     }]));
     setEditor(prev => ({ ...prev, nueva: '' }));
+    setSeleccionada(m.id);
     requestAnimationFrame(() => {
       const el = document.getElementById('tr-' + m.id);
       if (el) {
@@ -1035,6 +1051,7 @@ export default function App() {
       await api.guardarTrama(editor.linea.linea_id,
         orden.map(f => ({
           maquina_id: f.maquina_id, detiene_linea: f.detiene_linea,
+          fin_linea: Boolean(f.fin_linea),
           posicion: f.posicion, rama: f.rama,
           pos_x: f.x ?? null, pos_y: f.y ?? null
         })),
@@ -1058,6 +1075,44 @@ export default function App() {
     const usadas = new Set(editor.filas.map(f => f.maquina_id));
     return maqs.filter(m => !usadas.has(m.id));
   }, [editor, maqs]);
+
+  // lista del panel de agregar, filtrada por lo que se escribe
+  const disponiblesPick = useMemo(() => {
+    const t = sinTildes(pickerBuscar);
+    if (!t) return disponibles;
+    return disponibles.filter(m => sinTildes(`${m.nombre_corto} ${m.area}`).includes(t));
+  }, [disponibles, pickerBuscar]);
+
+  // En qué otras líneas está un equipo (para avisar antes de agregarlo)
+  function lineasDeMaquina(maquinaId) {
+    return (trama || [])
+      .filter(t => t.maquina_id === maquinaId && t.linea_id !== editor?.linea?.linea_id)
+      .map(t => {
+        const l = lineas.find(x => x.linea_id === t.linea_id);
+        return { id: t.linea_id, nombre: l?.nombre || `línea ${t.linea_id}`,
+                 armada: idsTurno.includes(t.linea_id) };
+      });
+  }
+
+  // Sugerencias al elegir una tarjeta: los bloques de la etapa anterior que
+  // todavía no le entran y los de la siguiente que todavía no salen de ella.
+  const sugerencias = useMemo(() => {
+    const vacio = { entrada: [], salida: [] };
+    if (!editor || !seleccionada) return vacio;
+    const filas = editor.filas;
+    const f = filas.find(x => x.maquina_id === seleccionada);
+    if (!f) return vacio;
+    const etapaDe = etapaVisual(filas);
+    const etapa = etapaDe(f.x);
+    const cons = editor.conexiones || [];
+    const ent = new Set(cons.filter(c => c.hasta_maquina_id === seleccionada).map(c => c.desde_maquina_id));
+    const sal = new Set(cons.filter(c => c.desde_maquina_id === seleccionada).map(c => c.hasta_maquina_id));
+    const enEtapa = (n) => filas.filter(x => x.maquina_id !== seleccionada && etapaDe(x.x) === n);
+    return {
+      entrada: enEtapa(etapa - 1).filter(x => !ent.has(x.maquina_id)),
+      salida: enEtapa(etapa + 1).filter(x => !sal.has(x.maquina_id))
+    };
+  }, [editor, seleccionada]);
 
   // Líneas visibles entre bloques (estilo n8n)
   useEffect(() => {
@@ -1580,9 +1635,13 @@ export default function App() {
 
               {editor.filas.map(f => {
                 const salientes = conexionesSalidaDe(f.maquina_id).length > 0;
+                const entrantes = entradasDe(f.maquina_id).length > 0;
                 return (
                   <div key={f.maquina_id} id={'tr-' + f.maquina_id}
                        className={`tf-card ${f.detiene_linea ? 'is-cuello' : ''}
+                                   ${f.fin_linea ? 'is-fin' : ''}
+                                   ${seleccionada === f.maquina_id ? 'sel' : ''}
+                                   ${(!salientes && !entrantes && editor.filas.length > 1) ? 'sin-conexion' : ''}
                                    ${moviendo === f.maquina_id ? 'dragging' : ''}`}
                        style={{
                          left: f.x, top: f.y,
@@ -1596,6 +1655,8 @@ export default function App() {
                          if (modoConexion && modoConexion !== f.maquina_id) {
                            intentarConectar(f.maquina_id, modoConexion);
                            setModoConexion(null);
+                         } else {
+                           setSeleccionada(f.maquina_id);
                          }
                        }}>
                       <span className="tf-port in" title="Entrada" />
@@ -1617,6 +1678,7 @@ export default function App() {
                       <div className="tf-head">
                         <span className="tf-etapa">Rama {f.rama}</span>
                         {f.detiene_linea && <span className="tf-tag">cuello</span>}
+                        {f.fin_linea && <span className="tf-tag fin">fin</span>}
                         {avisos.some(a => a.id === f.maquina_id) && (
                           <span className="tf-warn" title="Conexión incompleta">!</span>
                         )}
@@ -1655,6 +1717,35 @@ export default function App() {
                                onChange={() => marcarCuello(f.maquina_id)} />
                         cuello de línea
                       </label>
+                      <label className="tf-cuello tf-fin">
+                        <input type="checkbox" checked={f.fin_linea}
+                               onChange={() => alternarFin(f.maquina_id)} />
+                        fin de línea
+                      </label>
+
+                      {/* sugerencias para enlazar sin buscar en los desplegables */}
+                      {seleccionada === f.maquina_id &&
+                        (sugerencias.entrada.length > 0 || sugerencias.salida.length > 0) && (
+                        <div className="tf-sug">
+                          <span className="tf-sug-h">Sugerencias de conexión</span>
+                          <div className="tf-sug-chips">
+                            {sugerencias.entrada.map(x => (
+                              <button key={'e' + x.maquina_id} className="tf-sug-chip"
+                                      title={`Conectar la entrada desde ${x.nombre_corto}`}
+                                      onClick={() => intentarConectar(f.maquina_id, x.maquina_id)}>
+                                ← {x.nombre_corto}
+                              </button>
+                            ))}
+                            {sugerencias.salida.map(x => (
+                              <button key={'s' + x.maquina_id} className="tf-sug-chip out"
+                                      title={`Conectar la salida hacia ${x.nombre_corto}`}
+                                      onClick={() => intentarConectar(x.maquina_id, f.maquina_id)}>
+                                {x.nombre_corto} →
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
 
                       <div className="tf-actions">
                         <button className="danger" onClick={() => quitar(f.maquina_id)} title="Quitar">✕</button>
@@ -1666,17 +1757,51 @@ export default function App() {
             </div>
 
           <div className="add-row">
-            <select id="add-maquina" value={editor.nueva}
-                    onChange={e => setEditor(prev => ({ ...prev, nueva: e.target.value }))}>
-              <option value="">Agregar máquina…</option>
-              {disponibles.map(m => (
-                <option key={m.id} value={m.id}>{m.nombre_corto} · {m.area}</option>
-              ))}
-            </select>
-            <button onClick={agregarMaquina} disabled={!editor.nueva}>Agregar</button>
+            <button className="btn-agregar-tarjeta"
+                    onClick={() => { setPicker(v => !v); setPickerBuscar(''); }}>
+              ＋ Agregar tarjeta
+            </button>
             <button className="btn-acomodar" title="Separa las tarjetas que se pisan"
                     onClick={() => editar(filas => acomodar(filas))}>Acomodar</button>
           </div>
+
+          {picker && (
+            <div className="tf-picker">
+              <div className="tf-picker-top">
+                <b>Agregar tarjeta</b>
+                <input placeholder="Buscar equipo…" value={pickerBuscar} autoFocus
+                       onChange={e => setPickerBuscar(e.target.value)} />
+                <button className="x" onClick={() => setPicker(false)} aria-label="Cerrar">✕</button>
+              </div>
+              <div className="tf-picker-lista">
+                {disponiblesPick.map(m => {
+                  const otras = lineasDeMaquina(m.id);
+                  const ocupada = otras.some(o => o.armada);
+                  return (
+                    <button key={m.id} className="tf-picker-item" onClick={() => agregarMaquina(m.id)}>
+                      <span className="tf-picker-nombre">
+                        <b>{m.nombre_corto}</b>
+                        <small>{m.area}</small>
+                      </span>
+                      {otras.length > 0 && (
+                        <em className={ocupada ? 'ocupada' : ''}>
+                          {ocupada ? 'en el turno: ' : 'también en '}
+                          {otras.map(o => o.nombre).join(', ')}
+                        </em>
+                      )}
+                    </button>
+                  );
+                })}
+                {!disponiblesPick.length && (
+                  <div className="tf-picker-vacio">No hay equipos para agregar</div>
+                )}
+              </div>
+              <div className="tf-picker-foot">
+                <span>{editor.filas.length} en la trama</span>
+                <button className="btn-go small" onClick={() => setPicker(false)}>Listo</button>
+              </div>
+            </div>
+          )}
           </div>
 
           <div className="editor-foot">

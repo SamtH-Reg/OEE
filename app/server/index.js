@@ -86,7 +86,7 @@ app.get('/api/catalogo', async () => {
 app.get('/api/lineas', async () => {
   const [lineas, trama] = await Promise.all([
     q('select * from v_linea_estado'),
-    q(`select lm.linea_id, lm.posicion, lm.rama, lm.detiene_linea, lm.pos_x, lm.pos_y,
+    q(`select lm.linea_id, lm.posicion, lm.rama, lm.detiene_linea, lm.fin_linea, lm.pos_x, lm.pos_y,
               m.id as maquina_id, m.codigo, m.nombre, m.nombre_corto, m.criticidad,
               a.nombre as area
          from linea_maquinas lm
@@ -194,12 +194,13 @@ app.put('/api/lineas/:id/trama', async (req, reply) => {
     await client.query('delete from linea_maquinas where linea_id = $1', [lineaId]);
     for (let i = 0; i < maquinas.length; i++) {
       await client.query(
-        `insert into linea_maquinas (linea_id, maquina_id, posicion, rama, detiene_linea, pos_x, pos_y)
-         values ($1, $2, $3, $4, $5, $6, $7)`,
+        `insert into linea_maquinas (linea_id, maquina_id, posicion, rama, detiene_linea, fin_linea, pos_x, pos_y)
+         values ($1, $2, $3, $4, $5, $6, $7, $8)`,
         [lineaId, maquinas[i].maquina_id,
          maquinas[i].posicion ?? i + 1,
          maquinas[i].rama ?? 1,
          Boolean(maquinas[i].detiene_linea),
+         Boolean(maquinas[i].fin_linea),
          maquinas[i].pos_x ?? null,
          maquinas[i].pos_y ?? null]
       );
@@ -211,13 +212,13 @@ app.put('/api/lineas/:id/trama', async (req, reply) => {
         [lineaId, e.posicion, e.rama]);
       if (!ocupado.rowCount) {
         await client.query(
-          `insert into linea_maquinas (linea_id, maquina_id, posicion, rama, detiene_linea, pos_x, pos_y)
-           values ($1, $2, $3, $4, $5, $6, $7)`,
-          [lineaId, e.maquina_id, e.posicion, e.rama, e.detiene_linea, e.pos_x, e.pos_y]);
+          `insert into linea_maquinas (linea_id, maquina_id, posicion, rama, detiene_linea, fin_linea, pos_x, pos_y)
+           values ($1, $2, $3, $4, $5, $6, $7, $8)`,
+          [lineaId, e.maquina_id, e.posicion, e.rama, e.detiene_linea, e.fin_linea, e.pos_x, e.pos_y]);
       } else {
         await client.query(
-          `insert into linea_maquinas (linea_id, maquina_id, posicion, rama, detiene_linea)
-           select $1, $2, coalesce(max(posicion), 0) + 1, 1, false
+          `insert into linea_maquinas (linea_id, maquina_id, posicion, rama, detiene_linea, fin_linea)
+           select $1, $2, coalesce(max(posicion), 0) + 1, 1, false, false
              from linea_maquinas where linea_id = $1`,
           [lineaId, e.maquina_id]);
       }
@@ -415,7 +416,7 @@ app.get('/api/settings', async () => {
          left join especies e on e.id = l.especie_id
          left join productos p on p.id = l.producto_id
         order by l.orden, l.codigo`),
-    q(`select linea_id, maquina_id, posicion, rama, detiene_linea, pos_x, pos_y
+    q(`select linea_id, maquina_id, posicion, rama, detiene_linea, fin_linea, pos_x, pos_y
          from linea_maquinas order by linea_id, posicion, rama`),
     q('select linea_id, desde_maquina_id, hasta_maquina_id from linea_conexiones'),
     q('select id, codigo, nombre, activa from especies order by nombre'),
@@ -526,9 +527,9 @@ app.post('/api/lineas/:id/copiar', async (req, reply) => {
       }
       mapa.set(t.maquina_id, maquinaId);
       await client.query(
-        `insert into linea_maquinas (linea_id, maquina_id, posicion, rama, detiene_linea, pos_x, pos_y)
-         values ($1, $2, $3, $4, $5, $6, $7)`,
-        [lineaId, maquinaId, t.posicion, t.rama || 1, t.detiene_linea, t.pos_x, t.pos_y]);
+        `insert into linea_maquinas (linea_id, maquina_id, posicion, rama, detiene_linea, fin_linea, pos_x, pos_y)
+         values ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [lineaId, maquinaId, t.posicion, t.rama || 1, t.detiene_linea, t.fin_linea, t.pos_x, t.pos_y]);
     }
 
     // las conexiones se copian apuntando a los equipos nuevos
