@@ -1146,3 +1146,17 @@ header{
 }
 .lr-item em.ocupada{color:#A82C2C;font-weight:700}
 .lr-vacio{padding:16px;color:var(--muted);font-size:13.5px}
+
+/* líneas armadas esperando su turno */
+.linea-lista{
+  display:flex;align-items:center;gap:12px;min-height:68px;padding:10px 12px;
+  background:var(--panel);border:1px dashed var(--line2);border-radius:12px;
+}
+.ll-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.ll-txt b{font-size:14.5px;font-weight:600;line-height:1.2}
+.ll-txt small{color:var(--muted);font-size:11.5px}
+.ll-btn{
+  height:40px;padding:0 14px;border-radius:10px;border:1px solid var(--accent);
+  background:var(--accent);color:#fff;font:600 13px inherit;cursor:pointer;flex:0 0 auto;
+}
+.ll-btn:hover{filter:brightness(1.06)}

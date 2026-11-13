@@ -105,7 +105,18 @@ export default function App() {
         setProcesos(proc.procesos || []);
         const pid = catFresca.turno?.proceso_id ? Number(catFresca.turno.proceso_id) : null;
         setProcesoId(pid);
-        const psel = (proc.procesos || []).find(x => x.id === pid);
+        let lista = proc.procesos || [];
+        let psel = lista.find(x => x.id === pid);
+        // Si el turno tiene proceso pero la lista vino vacía (server recién arrancado),
+        // reintentar: si no, el panel muestra todas las líneas como «listas» y se pierde el turno.
+        if (pid && !psel) {
+          try {
+            const otra = await api.procesos();
+            lista = otra.procesos || [];
+            psel = lista.find(x => x.id === pid);
+            setProcesos(lista);
+          } catch { /* queda como vino */ }
+        }
         setLineasSel(psel ? psel.lineas || [] : []);
         // arrancar en el proceso del turno (no hay tablero de "toda la planta")
         if (pid) setSel('p:' + pid);
@@ -309,18 +320,34 @@ export default function App() {
     setLineaRapida(null);
     setConflictoEquipos([]);
     setError(null);
-    // queda marcada para el turno: se confirma con «Guardar cambios»
-    setLineasSel(prev => (prev.includes(lineaId) ? prev : [...prev, lineaId]));
+    // NO entra al turno: queda armada y lista para activarla cuando se pare la línea actual
     setToast({
-      titulo: 'Línea creada',
-      detalle: `${nombre} · ${equipos.length} equipos — conectá los bloques y guardá el turno`
+      titulo: 'Línea guardada',
+      detalle: `${nombre} · ${equipos.length} equipos — activála cuando pares la línea actual`
     });
     const nueva = (lin.lineas || []).find(l => l.linea_id === lineaId) || { linea_id: lineaId, nombre };
     abrirEditor(nueva);
   }
 
-  async function guardarProcesoTurno() {
-    const rep = conflictosDeTurno(lineasSel);
+  // Líneas ya armadas que NO están en el turno: quedan listas para activar cuando
+  // se corte el proceso de la línea que ocupa esos equipos.
+  const lineasListas = useMemo(() => {
+    const conTrama = new Set((trama || []).map(t => t.linea_id));
+    return lineas.filter(l => conTrama.has(l.linea_id) && !idsTurno.includes(l.linea_id));
+  }, [lineas, trama, idsTurno]);
+
+  function conQueChoca(lineaId) {
+    const equipos = new Set((trama || []).filter(t => t.linea_id === lineaId).map(t => t.maquina_id));
+    return lineasSel
+      .filter(lid => (trama || []).some(t => t.linea_id === lid && equipos.has(t.maquina_id)))
+      .map(lid => lineas.find(l => l.linea_id === lid)?.nombre)
+      .filter(Boolean);
+  }
+
+  // Guarda el turno con una selección de líneas dada (sive para «Guardar cambios»
+  // y para activar una línea ya armada). Devuelve true si quedó guardado.
+  async function guardarTurnoCon(seleccion) {
+    const rep = conflictosDeTurno(seleccion);
     if (rep.length) {
       const partes = rep.slice(0, 5).map(x => `${x.maquina} en ${x.lineas.join(' y ')}`);
       setConflictoEquipos(rep.map(x => x.id));
@@ -328,29 +355,58 @@ export default function App() {
         (rep.length > 5 ? ` y ${rep.length - 5} más` : '') +
         '. Un equipo no puede estar en dos líneas armadas al mismo tiempo: detené su proceso en la ' +
         'primera línea o dejá una sola de las dos en el turno.');
-      return;
+      return false;
     }
     setConflictoEquipos([]);
     try {
       let id = procesoId;
       if (!id) {
         // sin armado visible: el proceso del turno se nombra con las líneas elegidas
-        const nombre = lineasSel
+        const nombre = seleccion
           .map(lid => lineas.find(l => l.linea_id === lid)?.nombre || '')
           .filter(Boolean).join(' + ').slice(0, 60) || 'Proceso del turno';
         const r = await api.crearReceta({ nombre });
         id = r.id;
       }
-      await api.guardarEtapas(id, lineasSel.map((lid, i) => ({ orden: i + 1, tipo: 'linea', linea_id: lid })));
+      await api.guardarEtapas(id, seleccion.map((lid, i) => ({ orden: i + 1, tipo: 'linea', linea_id: lid })));
       if (cat?.turno) await api.setProcesoTurno(cat.turno.id, id);
       setProcesoId(id);
+      setLineasSel(seleccion);
       setLineasAbierto(false);
       const proc = await api.procesos();
       setProcesos(proc.procesos || []);
-      setToast({ titulo: 'Turno guardado', detalle: `${lineasSel.length} ${lineasSel.length === 1 ? 'línea' : 'líneas'}` });
+      return true;
     } catch (e) {
       setError(e.message);
+      return false;
     }
+  }
+
+  async function guardarProcesoTurno() {
+    const ok = await guardarTurnoCon(lineasSel);
+    if (ok) {
+      setToast({ titulo: 'Turno guardado',
+                 detalle: `${lineasSel.length} ${lineasSel.length === 1 ? 'línea' : 'líneas'}` });
+    }
+  }
+
+  // Activar una línea ya armada: entra al turno y, si comparte equipos con alguna
+  // de las que están operando, esa sale del turno en el mismo movimiento.
+  async function activarLinea(lineaId) {
+    const equipos = new Set((trama || []).filter(t => t.linea_id === lineaId).map(t => t.maquina_id));
+    const reemplaza = lineasSel.filter(lid =>
+      (trama || []).some(t => t.linea_id === lid && equipos.has(t.maquina_id)));
+    const seleccion = [...lineasSel.filter(lid => !reemplaza.includes(lid)), lineaId];
+    const nombre = lineas.find(l => l.linea_id === lineaId)?.nombre || 'La línea';
+    const ok = await guardarTurnoCon(seleccion);
+    if (!ok) return;
+    const salen = reemplaza
+      .map(lid => lineas.find(l => l.linea_id === lid)?.nombre)
+      .filter(Boolean);
+    setToast({
+      titulo: 'Línea activada',
+      detalle: `${nombre}${salen.length ? ` · sale ${salen.join(' y ')}` : ' · se sumó al turno'}`
+    });
   }
 
   // Con un proceso elegido, el tablero muestra solo las máquinas de sus líneas
@@ -1397,6 +1453,30 @@ export default function App() {
                       {st.estado === 'operando' ? 'OK' : st.estado === 'detenida' ? 'PARADA' : 'PARCIAL'}
                     </span>
                   </button>
+                );
+              })}
+            </>
+          )}
+
+          {/* Líneas ya armadas que esperan su turno: activarlas saca del turno a la
+              que está usando esos mismos equipos. */}
+          {lineasListas.length > 0 && (
+            <>
+              <div className="side-h">Líneas listas para activar</div>
+              {lineasListas.map(l => {
+                const choca = conQueChoca(l.linea_id);
+                const equipos = (trama || []).filter(t => t.linea_id === l.linea_id).length;
+                return (
+                  <div className="linea-lista" key={l.linea_id}>
+                    <div className="ll-txt">
+                      <b>{l.nombre}</b>
+                      <small>
+                        {equipos} equipos
+                        {choca.length > 0 ? ` · reemplaza a ${choca.join(', ')}` : ' · no choca con el turno'}
+                      </small>
+                    </div>
+                    <button className="ll-btn" onClick={() => activarLinea(l.linea_id)}>Activar</button>
+                  </div>
                 );
               })}
             </>

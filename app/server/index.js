@@ -168,13 +168,19 @@ app.put('/api/lineas/:id/trama', async (req, reply) => {
   }
 
   // Un equipo que HOY está en otra línea armada del turno no puede sumarse a
-  // ésta: el mismo equipo físico no puede correr en dos líneas a la vez. Se
-  // revisan sólo los que se agregan (los que ya estaban no traban la edición).
+  // ésta: el mismo equipo físico no puede correr en dos líneas a la vez. Pero
+  // esta línea puede NO estar armada todavía (se arma para el próximo cambio),
+  // así que la regla sólo aplica cuando la línea que se edita está en el turno.
   try {
+    const armada = await q(`
+      select 1 from receta_etapas e
+        join turnos t on t.proceso_id = e.receta_id
+       where t.id = fn_turno_para(now()) and e.tipo = 'linea' and e.linea_id = $1
+       limit 1`, [lineaId]);
     const previas = await q('select maquina_id from linea_maquinas where linea_id = $1', [lineaId]);
     const antes = new Set(previas.rows.map(r => Number(r.maquina_id)));
     const nuevas = [...ids].filter(id => !antes.has(id));
-    const choque = await equiposEnOtrasLineasArmadas(lineaId, nuevas);
+    const choque = armada.rowCount ? await equiposEnOtrasLineasArmadas(lineaId, nuevas) : [];
     if (choque.length) {
       return reply.code(409).send({ error: mensajeEquipoRepetido(choque) });
     }
@@ -1020,10 +1026,14 @@ app.put('/api/recetas/:id/etapas', async (req, reply) => {
     await client.query('begin');
     await client.query('delete from receta_etapas where receta_id = $1', [id]);
     let n = 0;
+    const vistos = new Set();   // una línea o máquina no se repite en el proceso
     for (const e of etapas) {
       const tipo = e.tipo === 'linea' ? 'linea' : 'maquina';
       if (tipo === 'linea' && !e.linea_id) continue;
       if (tipo === 'maquina' && !e.maquina_id) continue;
+      const clave = tipo + ':' + (tipo === 'linea' ? e.linea_id : e.maquina_id);
+      if (vistos.has(clave)) continue;
+      vistos.add(clave);
       n += 1;
       await client.query(
         `insert into receta_etapas (receta_id, orden, tipo, maquina_id, linea_id, etiqueta, paralelo)
