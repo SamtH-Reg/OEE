@@ -312,7 +312,8 @@ export default function App() {
       .map(([maq, ls]) => ({
         id: maq,
         maquina: nombreMaq.get(maq) || `equipo ${maq}`,
-        lineas: [...new Set(ls)].map(x => nombreLinea.get(x) || `línea ${x}`)
+        lineas: [...new Set(ls)].map(x => nombreLinea.get(x) || `línea ${x}`),
+        lineasIds: [...new Set(ls)]
       }));
   }
 
@@ -340,21 +341,6 @@ export default function App() {
     });
     const nueva = (lin.lineas || []).find(l => l.linea_id === lineaId) || { linea_id: lineaId, nombre };
     abrirEditor(nueva);
-  }
-
-  // Líneas ya armadas que NO están en el turno: quedan listas para activar cuando
-  // se corte el proceso de la línea que ocupa esos equipos.
-  const lineasListas = useMemo(() => {
-    const conTrama = new Set((trama || []).map(t => t.linea_id));
-    return lineas.filter(l => conTrama.has(l.linea_id) && !idsTurno.includes(l.linea_id));
-  }, [lineas, trama, idsTurno]);
-
-  function conQueChoca(lineaId) {
-    const equipos = new Set((trama || []).filter(t => t.linea_id === lineaId).map(t => t.maquina_id));
-    return lineasSel
-      .filter(lid => (trama || []).some(t => t.linea_id === lid && equipos.has(t.maquina_id)))
-      .map(lid => lineas.find(l => l.linea_id === lid)?.nombre)
-      .filter(Boolean);
   }
 
   // Guarda el turno con una selección de líneas dada (sive para «Guardar cambios»
@@ -396,6 +382,31 @@ export default function App() {
   }
 
   async function guardarProcesoTurno() {
+    if (turnoCerrado) return;
+    const rep = conflictosDeTurno(lineasSel);
+    if (rep.length) {
+      // Sacar del turno las líneas que ya estaban armadas y comparten equipos con
+      // las que se están sumando: es el cambio de armado, con aviso.
+      const conflictivas = new Set();
+      for (const x of rep) for (const id of x.lineasIds) conflictivas.add(id);
+      const yaArmadas = new Set(idsTurno);
+      let salenIds = [...conflictivas].filter(id => yaArmadas.has(id));
+      if (!salenIds.length) salenIds = [[...conflictivas][0]];
+      const salen = salenIds.map(lid => {
+        const l = lineas.find(x => x.linea_id === lid);
+        const detenidas = (trama || []).filter(t => t.linea_id === lid).filter(t => {
+          const m = maqs.find(x => x.id === t.maquina_id);
+          return m && estadoDe(m).tipo !== 'run';
+        }).length;
+        return { id: lid, nombre: l ? l.nombre : `línea ${lid}`, detenidas };
+      });
+      setConfirmarActivacion({
+        nombre: 'el armado',
+        salen,
+        seleccion: lineasSel.filter(id => !salenIds.includes(id))
+      });
+      return;
+    }
     const ok = await guardarTurnoCon(lineasSel);
     if (ok) {
       setToast({ titulo: 'Turno guardado',
@@ -415,51 +426,15 @@ export default function App() {
     }
   }
 
-  // Activar una línea ya armada. Si para eso hay que sacar del turno líneas que
-  // están usando esos equipos, primero se avisa: nada se cierra a ciegas.
-  function activarLinea(lineaId) {
-    if (turnoCerrado) {
-      setError('El turno está cerrado. Reabrilo para cambiar el armado.');
-      return;
-    }
-    const equipos = new Set((trama || []).filter(t => t.linea_id === lineaId).map(t => t.maquina_id));
-    const salen = lineasSel
-      .filter(lid => (trama || []).some(t => t.linea_id === lid && equipos.has(t.maquina_id)))
-      .map(lid => {
-        const l = lineas.find(x => x.linea_id === lid);
-        const detenidas = (trama || [])
-          .filter(t => t.linea_id === lid)
-          .filter(t => {
-            const m = maqs.find(x => x.id === t.maquina_id);
-            return m && estadoDe(m).tipo !== 'run';
-          }).length;
-        return { id: lid, nombre: l ? l.nombre : `línea ${lid}`, detenidas };
-      });
-    const nombre = lineas.find(l => l.linea_id === lineaId)?.nombre || 'La línea';
-
-    if (salen.length) {
-      setConfirmarActivacion({ lineaId, nombre, salen });
-      return;
-    }
-    guardarTurnoCon([...lineasSel, lineaId]).then(ok => {
-      if (ok) {
-        setToast({ titulo: 'Línea activada', detalle: `${nombre} · se sumó al turno` });
-        pedirHorasDelCorte();
-      }
-    });
-  }
-
   async function confirmarActivacionYGuardar() {
     const conf = confirmarActivacion;
     if (!conf) return;
     setConfirmarActivacion(null);
-    const salenIds = conf.salen.map(s => s.id);
-    const seleccion = [...lineasSel.filter(lid => !salenIds.includes(lid)), conf.lineaId];
-    const ok = await guardarTurnoCon(seleccion);
+    const ok = await guardarTurnoCon(conf.seleccion || lineasSel);
     if (ok) {
       setToast({
-        titulo: 'Línea activada',
-        detalle: `${conf.nombre} · salió ${conf.salen.map(s => s.nombre).join(' y ')}`
+        titulo: 'Turno guardado',
+        detalle: `salió ${conf.salen.map(s => s.nombre).join(' y ')}`
       });
       pedirHorasDelCorte();
     }
@@ -1680,31 +1655,6 @@ export default function App() {
             </>
           )}
 
-          {/* Líneas ya armadas que esperan su turno: activarlas saca del turno a la
-              que está usando esos mismos equipos. */}
-          {lineasListas.length > 0 && (
-            <>
-              <div className="side-h">Líneas listas para activar</div>
-              {lineasListas.map(l => {
-                const choca = conQueChoca(l.linea_id);
-                const equipos = (trama || []).filter(t => t.linea_id === l.linea_id).length;
-                return (
-                  <div className="linea-lista" key={l.linea_id}>
-                    <div className="ll-txt">
-                      <b>{l.nombre}</b>
-                      <small>
-                        {equipos} equipos
-                        {choca.length > 0 ? ` · reemplaza a ${choca.join(', ')}` : ' · no choca con el turno'}
-                      </small>
-                    </div>
-                    <button className="ll-btn" onClick={() => activarLinea(l.linea_id)}
-                            disabled={turnoCerrado}>Activar</button>
-                  </div>
-                );
-              })}
-            </>
-          )}
-
           {lineaActual && (
             <button className="btn-edit" onClick={() => abrirEditor()}>
               <svg viewBox="0 0 24 24">
@@ -2033,9 +1983,9 @@ export default function App() {
       {confirmarActivacion && (
         <div className="confirma-capa" onClick={() => setConfirmarActivacion(null)}>
           <div className="confirma" onClick={e => e.stopPropagation()}>
-            <h3>Activar {confirmarActivacion.nombre}</h3>
+            <h3>Guardar {confirmarActivacion.nombre}</h3>
             <p>
-              Para activarla tienen que salir del turno las líneas que están usando esos mismos equipos:
+              Para guardarlo tienen que salir del turno las líneas que están usando esos mismos equipos:
             </p>
             <ul className="confirma-lista">
               {confirmarActivacion.salen.map(s => (
@@ -2055,7 +2005,7 @@ export default function App() {
             <div className="confirma-acciones">
               <button className="ghost" onClick={() => setConfirmarActivacion(null)}>Cancelar</button>
               <button className="btn-go small" onClick={confirmarActivacionYGuardar}>
-                Activar y cerrar {confirmarActivacion.salen.length === 1 ? 'esa línea' : 'esas líneas'}
+                Guardar y cerrar {confirmarActivacion.salen.length === 1 ? 'esa línea' : 'esas líneas'}
               </button>
             </div>
           </div>
