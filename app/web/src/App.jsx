@@ -679,17 +679,10 @@ export default function App({ usuario, onSalir }) {
   };
   // Al sumar una línea al turno conviene revisar el rango: en planta la línea ya
   // venía trabajando cuando el operador la arma.
-  async function pedirHorasDelCorte() {
-    try {
-      const m = await api.monitor();
-      setMonitor(m);
-      const cortes = m?.cortes || [];
-      const ref = cortes.find(c => !c.hasta) || cortes[0];
-      setAjustar({
-        desde: aInput(ref?.desde || new Date()),
-        hasta: ref?.hasta ? aInput(ref.hasta) : ''
-      });
-    } catch { /* sin red: no se ofrece */ }
+  function pedirHorasDelCorte() {
+    // Por defecto, la hora en que se activa. Si la línea ya venía trabajando,
+    // la hora se corrige a mano (no se hereda la del armado anterior).
+    setAjustar({ desde: aInput(new Date()), hasta: '' });
   }
 
   function abrirAjusteHoras() {
@@ -2181,7 +2174,7 @@ export default function App({ usuario, onSalir }) {
         <div className="confirma-capa" onClick={() => setAjustar(null)}>
           <div className="confirma" onClick={e => e.stopPropagation()}>
             <h3>Horas del corte</h3>
-            <p>Corregí desde cuándo trabaja la línea con este armado. Si dejás el fin vacío, sigue en curso.</p>
+            <p>Viene con la hora actual: cambiala si la línea ya venía trabajando. Si dejás el fin vacío, sigue en curso.</p>
             <label className="an-campo">Desde
               <input type="datetime-local" value={ajustar.desde}
                      onChange={e => setAjustar({ ...ajustar, desde: e.target.value })} />
