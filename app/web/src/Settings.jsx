@@ -16,9 +16,10 @@ const vacio = {
   }
 };
 
-export default function Settings({ onClose, onTrama, onSaved }) {
-  const [tab, setTab] = useState('lineas');
+export default function Settings({ onClose, onTrama, onSaved, tabInicial }) {
+  const [tab, setTab] = useState(tabInicial || 'lineas');
   const [data, setData] = useState(null);
+  const procesoEnTurno = data?.turno?.proceso_id ? Number(data.turno.proceso_id) : null;
   const [form, setForm] = useState(null);      // {tipo, item, valores, error}
   const [error, setError] = useState(null);
   const [guardando, setGuardando] = useState(false);
@@ -508,7 +509,7 @@ export default function Settings({ onClose, onTrama, onSaved }) {
             </div>
             <div className="set-list">
               {data.recetas.filter(r => !r.archivada).map(r => (
-                <div className={`set-row ${r.activa ? '' : 'off'}`} key={r.id}>
+                <div className={`set-row ${r.activa ? '' : 'off'} ${procesoEnTurno === Number(r.id) ? 'en-turno' : ''}`} key={r.id}>
                   <span className="badge sm">{r.codigo}</span>
                   <div className="grow">
                     <b>{r.nombre}</b>
@@ -518,10 +519,15 @@ export default function Settings({ onClose, onTrama, onSaved }) {
                       {r.toneladas_turno ? ` · ${Number(r.toneladas_turno)} t/turno` : ''}
                       {` · ${r.maquinas} máq.`}
                       {r.activa ? '' : ' · inactiva'}
+                      {procesoEnTurno === Number(r.id) ? ' · EN EL TURNO' : ''}
                     </small>
                   </div>
                   <button className="btn-ghost" onClick={() => abrir('receta', r)}>Editar</button>
                   <button className="btn-ghost"
+                          disabled={procesoEnTurno === Number(r.id)}
+                          title={procesoEnTurno === Number(r.id)
+                            ? 'Es el proceso que está trabajando: cerralo desde el tablero de la línea'
+                            : 'Sacarlo del selector del turno'}
                           onClick={async () => {
                             try {
                               await api.archivarReceta(r.id, true);
@@ -546,12 +552,15 @@ export default function Settings({ onClose, onTrama, onSaved }) {
           <>
             <div className="set-bar">
               <span className="set-count">
-                {data.recetas.filter(r => r.archivada).length} procesos archivados
+                {data.recetas.filter(r => r.archivada).length} proceso
+                {data.recetas.filter(r => r.archivada).length === 1 ? '' : 's'} archivado
+                {data.recetas.filter(r => r.archivada).length === 1 ? '' : 's'}
               </span>
             </div>
             <div className="set-list">
               {data.recetas.filter(r => r.archivada).map(r => (
-                <div className="set-row off" key={r.id}>
+                <div className="set-row arch" key={r.id}>
+                  <span className="arch-tag">ARCHIVADO</span>
                   <span className="badge sm">{r.codigo}</span>
                   <div className="grow">
                     <b>{r.nombre}</b>
@@ -582,9 +591,7 @@ export default function Settings({ onClose, onTrama, onSaved }) {
               )}
             </div>
             <p className="set-hint">
-              Los archivados no aparecen en el selector del turno, pero conservan su historial de paradas.
-              Las líneas que sacás del tablero con «Archivar» no vienen acá: siguen existiendo en
-              «Cambiar líneas del turno» para volver a armarlas, y quedan registradas en los cortes del turno.
+              No salen en el selector del turno. Las líneas que sacás del tablero siguen en «Cambiar líneas del turno».
             </p>
           </>
         )}

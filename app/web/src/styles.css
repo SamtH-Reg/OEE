@@ -1575,3 +1575,23 @@ header{padding-top:env(safe-area-inset-top, 0px)}
   border:1px solid var(--line2);background:#fff;color:var(--ink);
   font:600 12.5px inherit;cursor:pointer;z-index:5
 }
+
+/* botón de archivados en el panel lateral */
+.btn-archivados{
+  width:100%;height:44px;border-radius:11px;border:1px dashed var(--line2);
+  background:#F6F7F9;color:var(--muted);font:600 13.5px inherit;cursor:pointer;margin-top:2px
+}
+.btn-archivados:hover{background:#EEF1F5;color:var(--ink)}
+
+/* fila de archivado: se distingue a simple vista del proceso activo */
+.set-row.arch{
+  background:#EDF0F4;border:1px solid #D3D9E2;border-left:4px solid #8A94A6;
+  border-radius:12px;padding-left:12px
+}
+.set-row.arch b{color:#4E5A6B}
+.set-row.arch small{color:#7A8698}
+.arch-tag{
+  flex:0 0 auto;font:700 10.5px/1 inherit;letter-spacing:.6px;color:#fff;background:#8A94A6;
+  padding:6px 8px;border-radius:6px
+}
+.set-row.en-turno{border-left:4px solid #12A35E;padding-left:12px;background:#F3FBF6}

@@ -156,7 +156,8 @@ export default function App({ usuario, onSalir }) {
   const puedeSupervisar = nivel >= 2;
   const esAdmin = nivel >= 3;
 
-  const [ajustes, setAjustes] = useState(false);
+  const [ajustes, setAjustes] = useState(false);        // true | 'archivados'
+  const [confirmarArchivo, setConfirmarArchivo] = useState(null);  // {id, nombre}
   const [analisis, setAnalisis] = useState(false);
   const [sheet, setSheet] = useState(null);
   const [editor, setEditor] = useState(null);
@@ -550,10 +551,13 @@ export default function App({ usuario, onSalir }) {
 
   // Archivar la línea del turno: cierra sus paradas abiertas y la saca del
   // armado para que no siga en pantalla (el historial queda en el análisis).
-  async function archivarLinea() {
+  function archivarLinea() {
     if (!lineaActual) return;
-    const nombre = lineaActual.nombre;
-    const id = lineaActual.linea_id;
+    setConfirmarArchivo({ id: lineaActual.linea_id, nombre: lineaActual.nombre });
+  }
+
+  async function archivarLineaAhora(id, nombre) {
+    setConfirmarArchivo(null);
     try {
       await api.archivarLinea(id, usuario?.nombre);
       const seleccion = lineasSel.filter(x => x !== id);
@@ -1723,6 +1727,12 @@ export default function App({ usuario, onSalir }) {
               ＋ Armar línea nueva
             </button>
             )}
+            {esAdmin && (
+              <button className="btn-archivados" onClick={() => setAjustes('archivados')}
+                      title="Ver los procesos archivados">
+                🗄 Archivados
+              </button>
+            )}
 
             {lineasAbierto && (
               <div className="lineas-lista">
@@ -2437,6 +2447,7 @@ export default function App({ usuario, onSalir }) {
 
       {ajustes && (
         <Settings
+          tabInicial={ajustes === 'archivados' ? 'archivados' : 'lineas'}
           onClose={() => { setAjustes(false); refrescar(); }}
           onSaved={refrescar}
           onTrama={(linea) => {
@@ -2445,6 +2456,25 @@ export default function App({ usuario, onSalir }) {
             refrescar().then(() => abrirEditor(linea));
           }}
         />
+      )}
+
+      {confirmarArchivo && (
+        <div className="confirma-capa" onClick={() => setConfirmarArchivo(null)}>
+          <div className="confirma" onClick={e => e.stopPropagation()}>
+            <h3>Archivar {confirmarArchivo.nombre}</h3>
+            <p>
+              Se cierra su proceso y la línea sale del turno. El historial de paradas queda guardado
+              y la línea se puede volver a armar cuando quieras.
+            </p>
+            <div className="confirma-acciones">
+              <button className="ghost" onClick={() => setConfirmarArchivo(null)}>Cancelar</button>
+              <button className="btn-go"
+                      onClick={() => archivarLineaAhora(confirmarArchivo.id, confirmarArchivo.nombre)}>
+                Archivar la línea
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {toast && (

@@ -296,7 +296,8 @@ app.get('/api/catalogo', async () => {
          left join recetas r on r.id = t.proceso_id
         where t.id = fn_turno_para(now())`),
     q('select maquina_id, codigo_causa_id from maquina_causas'),
-    q('select * from v_receta_etapas')
+    q('select * from v_receta_etapas'),
+    q('select id, proceso_id, cerrado from turnos where id = fn_turno_para(now())')
   ]);
   return {
     areas: areas.rows,
@@ -685,7 +686,7 @@ app.get('/api/historial', async (req) => {
 // ---------------- administración (ajustes) ----------------
 app.get('/api/settings', async () => {
   const [areas, maquinas, lineas, trama, conexiones, especies, productos, recetas, distribucion,
-         causas, categorias, maquinaCausas, etapas] = await Promise.all([
+         causas, categorias, maquinaCausas, etapas, turno] = await Promise.all([
     q('select id, codigo, nombre, orden, activa from areas order by orden, nombre'),
     q(`select m.id, m.area_id, m.codigo, m.nombre, m.nombre_corto, m.criticidad, m.activa,
               (select count(*) from registro_paradas p where p.maquina_id = m.id)::int as paradas
@@ -706,14 +707,16 @@ app.get('/api/settings', async () => {
     q('select id, codigo, categoria_id, descripcion, es_planificada, activo, direccion from codigos_causa order by categoria_id, descripcion'),
     q('select id, codigo, nombre, icono, orden from categorias_falla where activa order by orden'),
     q('select maquina_id, codigo_causa_id from maquina_causas'),
-    q('select * from v_receta_etapas')
+    q('select * from v_receta_etapas'),
+    q('select id, proceso_id, cerrado from turnos where id = fn_turno_para(now())')
   ]);
   return {
     areas: areas.rows, maquinas: maquinas.rows, lineas: lineas.rows, trama: trama.rows,
     especies: especies.rows, productos: productos.rows,
     recetas: recetas.rows, distribucion: distribucion.rows,
     causas: causas.rows, categorias: categorias.rows, maquina_causas: maquinaCausas.rows,
-    etapas: etapas.rows, conexiones: conexiones.rows
+    etapas: etapas.rows, conexiones: conexiones.rows,
+    turno: turno.rows[0] || null
   };
 });
 
@@ -1396,6 +1399,15 @@ app.post('/api/recetas/:id/archivar', async (req, reply) => {
   const id = Number(req.params.id);
   const archivada = (req.body || {}).archivada !== false;
   try {
+    if (archivada) {
+      const enTurno = await q(
+        'select 1 from turnos where proceso_id = $1 and id = fn_turno_para(now()) and not cerrado', [id]);
+      if (enTurno.rowCount) {
+        return reply.code(409).send({
+          error: 'ese proceso está trabajando en el turno: cerrá la línea desde su tablero'
+        });
+      }
+    }
     const r = await q(`update recetas set archivada = $2,
                                         archivada_en = case when $2 then now() else null end
                         where id = $1 returning id, archivada, archivada_en`,
