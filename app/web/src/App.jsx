@@ -2547,7 +2547,7 @@ export default function App({ usuario, onSalir }) {
             </p>
             <div className="confirma-acciones">
               <button className="ghost" onClick={() => setConfirmarArchivo(null)}>Cancelar</button>
-              <button className="btn-go"
+              <button className="btn-go small"
                       onClick={() => archivarLineaAhora(confirmarArchivo.id, confirmarArchivo.nombre)}>
                 Archivar la línea
               </button>

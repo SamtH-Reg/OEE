@@ -1613,3 +1613,14 @@ header{padding-top:env(safe-area-inset-top, 0px)}
   font:600 13px inherit;cursor:pointer
 }
 .ln-archivar:hover{background:#F4F6F8}
+
+/* los diálogos no se salen de la pantalla (tablet) y los botones quedan compactos */
+.confirma-capa{overflow:auto;align-items:center}
+.confirma{max-height:calc(100dvh - 32px);overflow:auto}
+.confirma-acciones{flex-wrap:wrap-reverse;justify-content:flex-end}
+.confirma-acciones .btn-go{min-width:0;width:auto;padding:14px 22px;font-size:15px;border-radius:12px}
+.confirma-acciones .ghost{min-height:46px}
+@media (max-width:620px){
+  .confirma-acciones{flex-direction:column}
+  .confirma-acciones .btn-go,.confirma-acciones .ghost{width:100%;justify-content:center}
+}
