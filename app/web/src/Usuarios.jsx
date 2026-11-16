@@ -137,26 +137,26 @@ export default function Usuarios() {
                 <option value="__nuevo">＋ Agregar nuevo rol…</option>
               </select>
             </label>
-            <label>Correo {nivelDe(form.rol) === 1 && <em>(opcional)</em>}
+            <label>Correo <em>(opcional)</em>
               <input value={form.email} placeholder="nombre@friosur.cl"
                      onChange={e => setForm({ ...form, email: e.target.value })} />
             </label>
-            {nivelDe(form.rol) === 1 ? (
-              <label>PIN (4 a 6 dígitos)
-                <input value={form.pin} inputMode="numeric" maxLength={6} placeholder="0000"
-                       onChange={e => setForm({ ...form, pin: e.target.value.replace(/\D/g, '') })} />
-              </label>
-            ) : (
-              <label>Contraseña
-                <input type="password" value={form.pass} placeholder="••••••••"
-                       onChange={e => setForm({ ...form, pass: e.target.value })} />
-              </label>
-            )}
+            <label>PIN para la tablet <em>(4 a 6 dígitos)</em>
+              <input value={form.pin} inputMode="numeric" maxLength={6} placeholder="0000"
+                     onChange={e => setForm({ ...form, pin: e.target.value.replace(/\D/g, '') })} />
+            </label>
+            <label>
+              {nivelDe(form.rol) >= 3 ? 'Contraseña' : <>Contraseña <em>(para entrar con correo)</em></>}
+              <input type="password" value={form.pass} placeholder="••••••••"
+                     onChange={e => setForm({ ...form, pass: e.target.value })} />
+            </label>
           </div>
           <div className="usu-acciones">
             <button className="ghost" onClick={() => setForm(null)}>Cancelar</button>
             <button className="btn-go small" onClick={guardar}
-                    disabled={guardando || !form.nombre.trim()}>Guardar</button>
+                    disabled={guardando || !form.nombre.trim() || (!form.id && !form.pin && !form.pass)}>
+              Guardar
+            </button>
           </div>
         </div>
       )}
@@ -188,17 +188,14 @@ export default function Usuarios() {
         <div className="usu-form">
           <b>Clave de {clave.user.nombre}</b>
           <div className="usu-grid">
-            {nivelDe(clave.user.rol) === 1 ? (
-              <label>PIN nuevo
-                <input value={clave.pin} inputMode="numeric" maxLength={6} autoFocus placeholder="0000"
-                       onChange={e => setClave({ ...clave, pin: e.target.value.replace(/\D/g, '') })} />
-              </label>
-            ) : (
-              <label>Contraseña nueva
-                <input type="password" value={clave.pass} autoFocus placeholder="••••••••"
-                       onChange={e => setClave({ ...clave, pass: e.target.value })} />
-              </label>
-            )}
+            <label>PIN nuevo <em>(tablet)</em>
+              <input value={clave.pin} inputMode="numeric" maxLength={6} autoFocus placeholder="0000"
+                     onChange={e => setClave({ ...clave, pin: e.target.value.replace(/\D/g, '') })} />
+            </label>
+            <label>Contraseña nueva <em>(correo)</em>
+              <input type="password" value={clave.pass} placeholder="••••••••"
+                     onChange={e => setClave({ ...clave, pass: e.target.value })} />
+            </label>
           </div>
           <div className="usu-acciones">
             <button className="ghost" onClick={() => setClave(null)}>Cancelar</button>
@@ -215,7 +212,7 @@ export default function Usuarios() {
               <small>
                 {nombreRol(u.rol)}
                 {u.email ? ` · ${u.email}` : ''}
-                {nivelDe(u.rol) === 1 ? (u.tiene_pin ? ' · con PIN' : ' · sin PIN') : ''}
+                {u.tiene_pin ? ' · con PIN' : ' · sin PIN'}
                 {u.activo ? '' : ' · inactivo'}
               </small>
             </div>
@@ -224,7 +221,7 @@ export default function Usuarios() {
             </button>
             <button className="btn-ghost"
                     onClick={() => setClave({ user: u, pin: '', pass: '' })}>
-              {nivelDe(u.rol) === 1 ? 'PIN' : 'Clave'}
+              Clave
             </button>
             <button className="btn-ghost" onClick={() => alternarActivo(u)}>
               {u.activo ? 'Desactivar' : 'Activar'}

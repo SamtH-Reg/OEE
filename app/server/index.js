@@ -187,7 +187,13 @@ app.post('/api/usuarios', async (req, reply) => {
   const rolOk = await q('select 1 from roles where codigo = $1', [rol]);
   if (!rolOk.rowCount) return reply.code(400).send({ error: 'ese rol no existe' });
   if (b.pin && !pinValido(b.pin)) return reply.code(400).send({ error: 'el PIN debe tener 4 a 6 dígitos' });
-  if (rol === 'admin' && !b.pass) return reply.code(400).send({ error: 'un administrador necesita contraseña' });
+  if (!b.pin && !b.pass) {
+    return reply.code(400).send({ error: 'poné un PIN para la tablet o una contraseña' });
+  }
+  const rolNivel = (await q('select nivel from roles where codigo = $1', [rol])).rows[0]?.nivel || 1;
+  if (rolNivel >= 3 && !b.pass) {
+    return reply.code(400).send({ error: 'un administrador necesita contraseña' });
+  }
   try {
     const r = await q(
       `insert into usuarios (nombre, email, rol, pass_hash, pin_hash, activo)
