@@ -412,10 +412,13 @@ export default function App({ usuario, onSalir }) {
       });
       return;
     }
+    const nuevas = lineasSel.filter(id => !idsTurno.includes(id));
     const ok = await guardarTurnoCon(lineasSel);
     if (ok) {
       setToast({ titulo: 'Turno guardado',
                  detalle: `${lineasSel.length} ${lineasSel.length === 1 ? 'línea' : 'líneas'}` });
+      // Con una línea nueva se confirma la hora de inicio del proceso.
+      if (nuevas.length) pedirHorasDelCorte();
     }
   }
 
@@ -1625,10 +1628,20 @@ export default function App({ usuario, onSalir }) {
               <div className="lineas-lista">
                 {lineas.map(l => {
                   const dentro = lineasSel.includes(l.linea_id);
+                  const fija = idsTurno.includes(l.linea_id);   // ya está en el turno guardado
                   return (
-                    <div key={l.linea_id} className={`lineas-op ${dentro ? 'on' : ''}`}>
+                    <div key={l.linea_id}
+                         className={`lineas-op ${dentro ? 'on' : ''} ${fija ? 'fija' : ''}`}
+                         title={fija ? 'Está en el turno: para sacarla usá «Archivar» en su tablero' : undefined}>
                       <button className="lineas-toggle" aria-pressed={dentro}
-                              onClick={() => { if (puedeSupervisar) toggleLinea(l.linea_id); }}>
+                              onClick={() => {
+                                if (!puedeSupervisar) return;
+                                if (fija) {
+                                  setError('Esa línea está en el turno. Para sacarla abrila y usá «Archivar».');
+                                  return;
+                                }
+                                toggleLinea(l.linea_id);
+                              }}>
                         <span className={`line-check ${dentro ? 'on' : ''}`} aria-hidden="true">
                           {dentro ? '✓' : ''}
                         </span>

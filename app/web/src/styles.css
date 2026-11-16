@@ -1544,3 +1544,8 @@ header{padding-top:env(safe-area-inset-top, 0px)}
 }
 .btn-archivar:hover{background:var(--panel2);color:var(--ink)}
 @media (pointer:coarse){ .btn-archivar{height:50px;min-height:50px} }
+
+/* línea ya armada: fija en el selector (se saca con Archivar) */
+.lineas-op.fija{background:var(--ok-bg)}
+.lineas-op.fija .line-check{border-color:#12A35E;background:#12A35E}
+.lineas-op.fija .lineas-toggle{cursor:default}
