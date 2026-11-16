@@ -1624,3 +1624,7 @@ header{padding-top:env(safe-area-inset-top, 0px)}
   .confirma-acciones{flex-direction:column}
   .confirma-acciones .btn-go,.confirma-acciones .ghost{width:100%;justify-content:center}
 }
+
+/* eliminar dentro del archivo: sólo administrador */
+.btn-ghost.peligro{color:#A82C2C;border-color:#EFCBC7}
+.btn-ghost.peligro:hover{background:#FDEFEE}

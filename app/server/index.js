@@ -977,6 +977,9 @@ app.put('/api/areas/:id', async (req, reply) => {
 // Eliminar una línea: se borran trama y conexiones; las paradas históricas
 // quedan sin línea (la máquina sigue existiendo).
 app.delete('/api/lineas/:id', async (req, reply) => {
+  if ((Number(req.usuario?.nivel) || 0) < 3) {
+    return reply.code(403).send({ error: 'sólo el administrador puede eliminar una línea' });
+  }
   const id = Number(req.params.id);
   const client = await pool.connect();
   try {
@@ -1456,6 +1459,24 @@ app.get('/api/lineas/archivadas', async () =>
   (await q(`select id, linea_id, linea, proceso, archivada_en, usuario
               from v_lineas_archivadas where reactivada_en is null
              order by archivada_en desc limit 40`)).rows);
+
+const soloAdmin = (req, reply) => {
+  if ((Number(req.usuario?.nivel) || 0) < 3) {
+    reply.code(403).send({ error: 'sólo el administrador puede eliminar' });
+    return false;
+  }
+  return true;
+};
+
+// Eliminar el registro de una línea archivada (el administrador limpia sus pruebas)
+app.delete('/api/lineas/archivadas/:id', async (req, reply) => {
+  if (!soloAdmin(req, reply)) return;
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return reply.code(400).send({ error: 'archivo inválido' });
+  const r = await q('delete from lineas_archivadas where id = $1 returning linea_id', [id]);
+  if (!r.rowCount) return reply.code(404).send({ error: 'ya no está' });
+  return { ok: true };
+});
 
 // Reactivar: se marca y el tablero la vuelve a armar (la línea mantiene su trama)
 app.post('/api/lineas/archivadas/:id/reactivar', async (req, reply) => {

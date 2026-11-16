@@ -66,6 +66,7 @@ export const api = {
     req(`/api/lineas/${lineaId}/archivar`, { method: 'POST', body: JSON.stringify({ usuario }) }),
   lineasArchivadas: () => req('/api/lineas/archivadas'),
   reactivarLinea: (id) => req(`/api/lineas/archivadas/${id}/reactivar`, { method: 'POST' }),
+  borrarArchivo: (id) => req(`/api/lineas/archivadas/${id}`, { method: 'DELETE' }),
   sync: (body) => req('/api/sync', { method: 'POST', body: JSON.stringify(body) }),
   settings: () => req('/api/settings'),
   crearLinea: (b) => req('/api/lineas', { method: 'POST', body: JSON.stringify(b) }),

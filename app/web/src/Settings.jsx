@@ -16,7 +16,7 @@ const vacio = {
   }
 };
 
-export default function Settings({ onClose, onTrama, onSaved, tabInicial, soloArchivados, onReactivar }) {
+export default function Settings({ onClose, onTrama, onSaved, tabInicial, soloArchivados, onReactivar, esAdmin }) {
   const [tab, setTab] = useState(soloArchivados ? 'archivados' : (tabInicial || 'lineas'));
   const [data, setData] = useState(null);
   const procesoEnTurno = data?.turno?.proceso_id ? Number(data.turno.proceso_id) : null;
@@ -591,6 +591,18 @@ export default function Settings({ onClose, onTrama, onSaved, tabInicial, soloAr
                           }}>
                     Reactivar
                   </button>
+                  {esAdmin && (
+                    <button className="btn-ghost peligro"
+                            title="Borra este registro del archivo (queda la línea)"
+                            onClick={async () => {
+                              try {
+                                await api.borrarArchivo(a.id);
+                                await cargar();
+                              } catch (e) { setError(e.message); }
+                            }}>
+                      Eliminar
+                    </button>
+                  )}
                 </div>
               ))}
               {!(data.lineas_archivadas || []).length && (

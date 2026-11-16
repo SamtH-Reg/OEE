@@ -2527,6 +2527,7 @@ export default function App({ usuario, onSalir }) {
           tabInicial={ajustes === 'archivados' ? 'archivados' : 'lineas'}
           soloArchivados={ajustes === 'archivados' && !esAdmin}
           onReactivar={reactivarLineaArchivada}
+          esAdmin={esAdmin}
           onClose={() => { setAjustes(false); refrescar(); }}
           onSaved={refrescar}
           onTrama={(linea) => {
