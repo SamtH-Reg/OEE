@@ -368,6 +368,7 @@ export default function Settings({ onClose, onTrama, onSaved }) {
           <button className={tab === 'lineas' ? 'on' : ''} onClick={() => setTab('lineas')}>Líneas</button>
           <button className={tab === 'equipos' ? 'on' : ''} onClick={() => setTab('equipos')}>Equipos</button>
           <button className={tab === 'recetas' ? 'on' : ''} onClick={() => setTab('recetas')}>Recetas</button>
+          <button className={tab === 'archivados' ? 'on' : ''} onClick={() => setTab('archivados')}>Archivados</button>
           <button className={tab === 'fallas' ? 'on' : ''} onClick={() => setTab('fallas')}>Fallas</button>
           <button className={tab === 'usuarios' ? 'on' : ''} onClick={() => setTab('usuarios')}>Usuarios</button>
           <button className={tab === 'datos' ? 'on' : ''} onClick={() => setTab('datos')}>Datos</button>
@@ -494,12 +495,20 @@ export default function Settings({ onClose, onTrama, onSaved }) {
         {tab === 'recetas' && (
           <>
             <div className="set-bar">
-              <span className="set-count">{data.recetas.length} recetas</span>
+              <span className="set-count">
+                {data.recetas.filter(r => !r.archivada).length} recetas
+                {data.recetas.some(r => r.archivada) && (
+                  <button className="an-link" style={{ marginLeft: 12 }}
+                          onClick={() => setTab('archivados')}>
+                    {data.recetas.filter(r => r.archivada).length} archivados
+                  </button>
+                )}
+              </span>
               <button className="btn-add" onClick={() => abrir('receta')}>＋ Nueva receta</button>
             </div>
             <div className="set-list">
-              {data.recetas.map(r => (
-                <div className={`set-row ${r.activa && !r.archivada ? '' : 'off'}`} key={r.id}>
+              {data.recetas.filter(r => !r.archivada).map(r => (
+                <div className={`set-row ${r.activa ? '' : 'off'}`} key={r.id}>
                   <span className="badge sm">{r.codigo}</span>
                   <div className="grow">
                     <b>{r.nombre}</b>
@@ -508,7 +517,6 @@ export default function Settings({ onClose, onTrama, onSaved }) {
                       {' · '}{r.linea_codigo || 'sin línea'}
                       {r.toneladas_turno ? ` · ${Number(r.toneladas_turno)} t/turno` : ''}
                       {` · ${r.maquinas} máq.`}
-                      {r.archivada ? ' · archivado' : ''}
                       {r.activa ? '' : ' · inactiva'}
                     </small>
                   </div>
@@ -516,12 +524,12 @@ export default function Settings({ onClose, onTrama, onSaved }) {
                   <button className="btn-ghost"
                           onClick={async () => {
                             try {
-                              await api.archivarReceta(r.id, !r.archivada);
+                              await api.archivarReceta(r.id, true);
                               await cargar();
                               onSaved && onSaved();
                             } catch (e) { setError(e.message); }
                           }}>
-                    {r.archivada ? 'Restaurar' : 'Archivar'}
+                    Archivar
                   </button>
                 </div>
               ))}
@@ -529,6 +537,54 @@ export default function Settings({ onClose, onTrama, onSaved }) {
             <p className="set-hint">
               La receta define especie, producto, línea, toneladas planificadas y cómo se reparte el
               flujo entre las máquinas de esa línea.
+            </p>
+          </>
+        )}
+
+        {/* -------- archivados -------- */}
+        {tab === 'archivados' && (
+          <>
+            <div className="set-bar">
+              <span className="set-count">
+                {data.recetas.filter(r => r.archivada).length} procesos archivados
+              </span>
+            </div>
+            <div className="set-list">
+              {data.recetas.filter(r => r.archivada).map(r => (
+                <div className="set-row off" key={r.id}>
+                  <span className="badge sm">{r.codigo}</span>
+                  <div className="grow">
+                    <b>{r.nombre}</b>
+                    <small>
+                      {r.etapas ? `${r.etapas} ${r.etapas === 1 ? 'línea' : 'líneas'}` : 'sin etapas'}
+                      {r.archivada_en
+                        ? ` · archivado el ${new Date(r.archivada_en).toLocaleDateString('es-CL', { day: '2-digit', month: 'short' })} a las ${new Date(r.archivada_en).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}`
+                        : ''}
+                    </small>
+                  </div>
+                  <button className="btn-ghost"
+                          onClick={async () => {
+                            try {
+                              await api.archivarReceta(r.id, false);
+                              await cargar();
+                              onSaved && onSaved();
+                            } catch (e) { setError(e.message); }
+                          }}>
+                    Restaurar
+                  </button>
+                </div>
+              ))}
+              {!data.recetas.some(r => r.archivada) && (
+                <p className="set-hint">
+                  No hay procesos archivados. Los armados que archivás desde la pestaña Recetas aparecen
+                  acá para revisarlos o restaurarlos.
+                </p>
+              )}
+            </div>
+            <p className="set-hint">
+              Los archivados no aparecen en el selector del turno, pero conservan su historial de paradas.
+              Las líneas que sacás del tablero con «Archivar» no vienen acá: siguen existiendo en
+              «Cambiar líneas del turno» para volver a armarlas, y quedan registradas en los cortes del turno.
             </p>
           </>
         )}

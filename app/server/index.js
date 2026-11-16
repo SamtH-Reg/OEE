@@ -1386,7 +1386,9 @@ app.post('/api/recetas/:id/archivar', async (req, reply) => {
   const id = Number(req.params.id);
   const archivada = (req.body || {}).archivada !== false;
   try {
-    const r = await q('update recetas set archivada = $2 where id = $1 returning id, archivada',
+    const r = await q(`update recetas set archivada = $2,
+                                        archivada_en = case when $2 then now() else null end
+                        where id = $1 returning id, archivada, archivada_en`,
       [id, archivada]);
     if (!r.rowCount) return reply.code(404).send({ error: 'proceso no existe' });
     return r.rows[0];
