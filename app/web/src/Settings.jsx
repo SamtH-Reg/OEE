@@ -16,7 +16,7 @@ const vacio = {
   }
 };
 
-export default function Settings({ onClose, onTrama, onSaved, tabInicial, soloArchivados }) {
+export default function Settings({ onClose, onTrama, onSaved, tabInicial, soloArchivados, onReactivar }) {
   const [tab, setTab] = useState(soloArchivados ? 'archivados' : (tabInicial || 'lineas'));
   const [data, setData] = useState(null);
   const procesoEnTurno = data?.turno?.proceso_id ? Number(data.turno.proceso_id) : null;
@@ -562,6 +562,46 @@ export default function Settings({ onClose, onTrama, onSaved, tabInicial, soloAr
         {tab === 'archivados' && (
           <>
             <div className="set-bar">
+              <span className="set-count">
+                {(data.lineas_archivadas || []).length} línea
+                {(data.lineas_archivadas || []).length === 1 ? '' : 's'} archivada
+                {(data.lineas_archivadas || []).length === 1 ? '' : 's'}
+              </span>
+            </div>
+            <div className="set-list">
+              {(data.lineas_archivadas || []).map(a => (
+                <div className="set-row arch" key={`la${a.id}`}>
+                  <span className="arch-tag">ARCHIVADA</span>
+                  <div className="grow">
+                    <b>{a.linea}</b>
+                    <small>
+                      {new Date(a.archivada_en).toLocaleDateString('es-CL', { day: '2-digit', month: 'short' })}
+                      {' a las '}
+                      {new Date(a.archivada_en).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}
+                      {a.proceso ? ` · ${a.proceso}` : ''}
+                    </small>
+                  </div>
+                  <button className="btn-go small"
+                          onClick={async () => {
+                            try {
+                              await api.reactivarLinea(a.id);
+                              await cargar();
+                              onReactivar && onReactivar(a.linea_id);
+                            } catch (e) { setError(e.message); }
+                          }}>
+                    Reactivar
+                  </button>
+                </div>
+              ))}
+              {!(data.lineas_archivadas || []).length && (
+                <p className="set-hint">
+                  Ninguna línea archivada. Cuando archivás una línea desde su tablero aparece acá
+                  para volver a activarla con su mismo armado.
+                </p>
+              )}
+            </div>
+
+            <div className="set-bar" style={{ marginTop: 18 }}>
               <span className="set-count">
                 {data.recetas.filter(r => r.archivada).length} proceso
                 {data.recetas.filter(r => r.archivada).length === 1 ? '' : 's'} archivado

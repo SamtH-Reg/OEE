@@ -297,7 +297,10 @@ app.get('/api/catalogo', async () => {
         where t.id = fn_turno_para(now())`),
     q('select maquina_id, codigo_causa_id from maquina_causas'),
     q('select * from v_receta_etapas'),
-    q('select id, proceso_id, cerrado from turnos where id = fn_turno_para(now())')
+    q('select id, proceso_id, cerrado from turnos where id = fn_turno_para(now())'),
+    q(`select id, linea_id, linea, proceso, archivada_en, usuario
+         from v_lineas_archivadas where reactivada_en is null
+        order by archivada_en desc limit 40`)
   ]);
   return {
     areas: areas.rows,
@@ -686,7 +689,7 @@ app.get('/api/historial', async (req) => {
 // ---------------- administración (ajustes) ----------------
 app.get('/api/settings', async () => {
   const [areas, maquinas, lineas, trama, conexiones, especies, productos, recetas, distribucion,
-         causas, categorias, maquinaCausas, etapas, turno] = await Promise.all([
+         causas, categorias, maquinaCausas, etapas, turno, lineasArch] = await Promise.all([
     q('select id, codigo, nombre, orden, activa from areas order by orden, nombre'),
     q(`select m.id, m.area_id, m.codigo, m.nombre, m.nombre_corto, m.criticidad, m.activa,
               (select count(*) from registro_paradas p where p.maquina_id = m.id)::int as paradas
@@ -708,7 +711,10 @@ app.get('/api/settings', async () => {
     q('select id, codigo, nombre, icono, orden from categorias_falla where activa order by orden'),
     q('select maquina_id, codigo_causa_id from maquina_causas'),
     q('select * from v_receta_etapas'),
-    q('select id, proceso_id, cerrado from turnos where id = fn_turno_para(now())')
+    q('select id, proceso_id, cerrado from turnos where id = fn_turno_para(now())'),
+    q(`select id, linea_id, linea, proceso, archivada_en, usuario
+         from v_lineas_archivadas where reactivada_en is null
+        order by archivada_en desc limit 40`)
   ]);
   return {
     areas: areas.rows, maquinas: maquinas.rows, lineas: lineas.rows, trama: trama.rows,
@@ -716,7 +722,8 @@ app.get('/api/settings', async () => {
     recetas: recetas.rows, distribucion: distribucion.rows,
     causas: causas.rows, categorias: categorias.rows, maquina_causas: maquinaCausas.rows,
     etapas: etapas.rows, conexiones: conexiones.rows,
-    turno: turno.rows[0] || null
+    turno: turno.rows[0] || null,
+    lineas_archivadas: lineasArch.rows
   };
 });
 
@@ -1433,10 +1440,32 @@ app.post('/api/lineas/:id/archivar', async (req, reply) => {
        where p.estado = 'activa'
          and p.maquina_id in (select lm.maquina_id from linea_maquinas lm where lm.linea_id = $1)
       returning p.id`, [lineaId, texto((req.body || {}).usuario, 80) || 'archivo']);
+    // queda anotada para poder volver a activarla más tarde
+    await q(`insert into lineas_archivadas (linea_id, turno_id, proceso_id, usuario)
+             select $1, t.id, t.proceso_id, $2
+               from turnos t where t.id = fn_turno_para(now())`,
+      [lineaId, texto((req.body || {}).usuario, 80) || 'archivo']);
     return { ok: true, cerradas: r.rowCount };
   } catch (e) {
     return reply.code(400).send({ error: e.message });
   }
+});
+
+// Líneas sacadas del turno que todavía se pueden volver a activar
+app.get('/api/lineas/archivadas', async () =>
+  (await q(`select id, linea_id, linea, proceso, archivada_en, usuario
+              from v_lineas_archivadas where reactivada_en is null
+             order by archivada_en desc limit 40`)).rows);
+
+// Reactivar: se marca y el tablero la vuelve a armar (la línea mantiene su trama)
+app.post('/api/lineas/archivadas/:id/reactivar', async (req, reply) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return reply.code(400).send({ error: 'archivo inválido' });
+  const r = await q(`update lineas_archivadas set reactivada_en = now()
+                      where id = $1 and reactivada_en is null
+                      returning linea_id`, [id]);
+  if (!r.rowCount) return reply.code(404).send({ error: 'esa línea ya no está archivada' });
+  return { ok: true, linea_id: r.rows[0].linea_id };
 });
 
 // Lista de procesos para el operador

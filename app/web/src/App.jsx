@@ -634,6 +634,18 @@ export default function App({ usuario, onSalir }) {
     }
   }
 
+  // Volver a poner a trabajar una línea archivada: la arma en el turno con su trama
+  async function reactivarLineaArchivada(lineaId) {
+    const nueva = lineasSel.includes(lineaId) ? lineasSel : [...lineasSel, lineaId];
+    setAjustes(false);
+    const ok = await guardarTurnoCon(nueva);
+    if (!ok) return;
+    const l = lineas.find(x => x.id === lineaId);
+    setToast({ titulo: 'Línea reactivada', detalle: `${l?.nombre || ''} volvió al turno` });
+    setSel(lineaId);
+    pedirHorasDelCorte();
+  }
+
   // Mover un equipo de esta línea a otra (cambia de proceso, no se duplica)
   async function moverEquipo(maquinaId, destinoId) {
     if (!editor) return;
@@ -2514,6 +2526,7 @@ export default function App({ usuario, onSalir }) {
         <Settings
           tabInicial={ajustes === 'archivados' ? 'archivados' : 'lineas'}
           soloArchivados={ajustes === 'archivados' && !esAdmin}
+          onReactivar={reactivarLineaArchivada}
           onClose={() => { setAjustes(false); refrescar(); }}
           onSaved={refrescar}
           onTrama={(linea) => {
