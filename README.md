@@ -189,13 +189,44 @@ npm start            # http://localhost:8787
   `fn_cerrar_parada()`; cada evento se confirma por id.
 - **Deshacer**: 5 segundos para revertir un registro antes de que salga de la cola.
 
+## Acceso, roles y despliegue
+
+- **Administrador**: entra con correo y contraseña. Ve todo, incluidos los catálogos y la pestaña
+  **Ajustes → Usuarios**.
+- **Supervisor**: correo y contraseña. Arma el turno, ajusta las horas del corte y ve el análisis.
+- **Operador de máquina**: entra con un **PIN de 4 a 6 dígitos** en la tablet (teclado grande) y sólo
+  registra paradas.
+- Las claves y los PIN se guardan con **scrypt** (`salt:hash`) y la sesión es un **JWT HS256** de 30 días
+  en `Authorization: Bearer`. El rol se valida en el servidor por ruta.
+- El administrador inicial se siembra al arrancar **sólo desde variables de entorno**
+  (`ADMIN_EMAIL`, `ADMIN_PASS`, `ADMIN_NOMBRE`); nunca hay credenciales en el código. Si no están, la app
+  funciona pero no crea usuarios.
+- Los usuarios se crean y editan en **Ajustes → Usuarios**: nombre, rol, correo y PIN o contraseña.
+
+### Desplegar en Vercel
+
+La app vive en `app/`. `api/index.js` expone Fastify como función y `vercel.json` fija Vite, la salida
+`web/dist` y el rewrite `/api/*`.
+
+```bash
+cd app
+npx vercel link --yes --project paradas-planta
+npx vercel env add DATABASE_URL production
+npx vercel env add AUTH_SECRET production
+npx vercel env add ADMIN_EMAIL production   # opcional: siembra el primer admin
+npx vercel env add ADMIN_PASS production
+npx vercel deploy --prod
+```
+
+El service worker (offline) se registra **sólo sobre HTTPS o localhost**: por IP en HTTP la app anda pero
+sin PWA.
+
 ### Limitaciones de esta versión
 
-1. El token de la tablet es fijo (`APP_TOKEN=demo`). Falta JWT de turno y roles.
-2. No existe todavía pantalla de historial ni de administración de catálogos.
-3. Las paradas que llegan por la cola se guardan con `origen = 'offline'` aunque la tablet
+1. No existe todavía pantalla de historial ni de administración de catálogos.
+2. Las paradas que llegan por la cola se guardan con `origen = 'offline'` aunque la tablet
    tuviera red al registrarlas (el evento siempre pasa por la cola local).
-4. El frontend está en JSX sin tipos; el paso a TypeScript es mecánico.
+3. El frontend está en JSX sin tipos; el paso a TypeScript es mecánico.
 
 ## Zona horaria
 

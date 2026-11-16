@@ -30,11 +30,17 @@ const q = (sql, params) => pool.query(sql, params);
 // Usuarios y sesiones: admin con correo y contraseña, operadores con PIN.
 // El token (JWT HS256) viaja en Authorization: Bearer y dura 30 días.
 // ---------------------------------------------------------------------------
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'jhuequen@friosur.cl';
-const ADMIN_PASS = process.env.ADMIN_PASS || 'capricornio1988';
-const ADMIN_NOMBRE = process.env.ADMIN_NOMBRE || 'José Huequén';
+// El administrador inicial sale de las variables de entorno (nunca del código):
+// si no están, la app funciona pero no se siembra ningún usuario.
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+const ADMIN_PASS = process.env.ADMIN_PASS || '';
+const ADMIN_NOMBRE = process.env.ADMIN_NOMBRE || 'Administrador';
 
 async function asegurarAdmin() {
+  if (!ADMIN_EMAIL || !ADMIN_PASS) {
+    console.log('sin ADMIN_EMAIL / ADMIN_PASS: no se siembra administrador');
+    return;
+  }
   try {
     const ya = await q("select id from usuarios where rol = 'admin' limit 1");
     if (ya.rowCount) return;

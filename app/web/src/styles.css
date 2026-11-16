@@ -1501,7 +1501,10 @@ header{padding-top:env(safe-area-inset-top, 0px)}
   height:52px;border:1px solid var(--line2);border-radius:12px;padding:0 14px;
   font:16px inherit;background:#fff;color:var(--ink);
 }
-.login-form .btn-go{height:52px;border-radius:12px;border:0;background:var(--accent);color:#fff;font:600 16px inherit;cursor:pointer}
+.login-form .btn-go{
+  height:52px;min-width:0;width:100%;padding:0 16px;border-radius:12px;border:0;
+  background:var(--accent);color:#fff;font:600 16px inherit;cursor:pointer;
+}
 .login-form .btn-go:disabled{opacity:.5;cursor:default}
 .login-error{
   margin-top:12px;background:var(--stop-bg);border:1px solid #F2C9C4;color:#98271E;

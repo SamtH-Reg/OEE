@@ -7,7 +7,7 @@ import { api, sesion } from './api';
 export default function Login({ onEntrar }) {
   const [modo, setModo] = useState('pin');        // 'pin' | 'clave'
   const [pin, setPin] = useState('');
-  const [email, setEmail] = useState('jhuequen@friosur.cl');
+  const [email, setEmail] = useState('');
   const [pass, setPass] = useState('');
   const [error, setError] = useState(null);
   const [cargando, setCargando] = useState(false);
@@ -96,7 +96,7 @@ export default function Login({ onEntrar }) {
           <form className="login-form" onSubmit={entrarConClave}>
             <label>Correo
               <input type="email" value={email} autoComplete="username"
-                     onChange={e => setEmail(e.target.value)} placeholder="nombre@friosur.cl" />
+                     onChange={e => setEmail(e.target.value)} placeholder="Correo" />
             </label>
             <label>Contraseña
               <input type="password" value={pass} autoComplete="current-password"
