@@ -4,16 +4,20 @@ import { api } from './api';
 // Alta y edición de usuarios: los operadores entran con PIN, los supervisores y
 // administradores con correo y contraseña. Sólo lo ve el administrador.
 
-const ROLES_UI = [
-  { id: 'operador', nombre: 'Operador de máquina (PIN)' },
-  { id: 'supervisor', nombre: 'Supervisor (correo + clave)' },
-  { id: 'admin', nombre: 'Administrador (correo + clave)' }
-];
-
 const vacio = { nombre: '', email: '', rol: 'operador', pin: '', pass: '' };
+
+// Los roles viven en la base: se pueden crear nuevos y cada uno toma un nivel
+// (1 operador, 2 supervisor, 3 administrador).
+const NIVELES = [
+  { n: 1, texto: 'Nivel 1 · operador (registra paradas)' },
+  { n: 2, texto: 'Nivel 2 · supervisor (arma el turno y ve el análisis)' },
+  { n: 3, texto: 'Nivel 3 · administrador (todo, incluidos catálogos)' }
+];
 
 export default function Usuarios() {
   const [lista, setLista] = useState([]);
+  const [roles, setRoles] = useState([]);
+  const [nuevoRol, setNuevoRol] = useState(null);  // {nombre, nivel}
   const [form, setForm] = useState(null);       // { id?, ...vacio }
   const [clave, setClave] = useState(null);     // { user, pin, pass }
   const [error, setError] = useState(null);
@@ -22,13 +26,34 @@ export default function Usuarios() {
 
   async function cargar() {
     try {
-      const r = await api.usuarios();
-      setLista(r.usuarios || []);
+      const [u, r] = await Promise.all([api.usuarios(), api.roles()]);
+      setLista(u.usuarios || []);
+      setRoles(r.roles || []);
     } catch (e) {
       setError(e.message);
     }
   }
   useEffect(() => { cargar(); }, []);
+
+  const nombreRol = (codigo) => roles.find(r => r.codigo === codigo)?.nombre || codigo;
+  const nivelDe = (codigo) => Number(roles.find(r => r.codigo === codigo)?.nivel) || 1;
+
+  async function crearRol() {
+    if (!nuevoRol || !nuevoRol.nombre.trim()) return;
+    setGuardando(true);
+    setError(null);
+    try {
+      const creado = await api.crearRol({ nombre: nuevoRol.nombre.trim(), nivel: Number(nuevoRol.nivel) });
+      setNuevoRol(null);
+      await cargar();
+      if (form) setForm({ ...form, rol: creado.codigo });
+      setAviso(`Rol «${creado.nombre}» creado`);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setGuardando(false);
+    }
+  }
 
   async function guardar() {
     if (!form) return;
@@ -103,15 +128,20 @@ export default function Usuarios() {
                      onChange={e => setForm({ ...form, nombre: e.target.value })} />
             </label>
             <label>Rol
-              <select value={form.rol} onChange={e => setForm({ ...form, rol: e.target.value })}>
-                {ROLES_UI.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
+              <select value={form.rol}
+                      onChange={e => {
+                        if (e.target.value === '__nuevo') { setNuevoRol({ nombre: '', nivel: 1 }); return; }
+                        setForm({ ...form, rol: e.target.value });
+                      }}>
+                {roles.map(r => <option key={r.codigo} value={r.codigo}>{r.nombre} · nivel {r.nivel}</option>)}
+                <option value="__nuevo">＋ Agregar nuevo rol…</option>
               </select>
             </label>
-            <label>Correo {form.rol === 'operador' && <em>(opcional)</em>}
+            <label>Correo {nivelDe(form.rol) === 1 && <em>(opcional)</em>}
               <input value={form.email} placeholder="nombre@friosur.cl"
                      onChange={e => setForm({ ...form, email: e.target.value })} />
             </label>
-            {form.rol === 'operador' ? (
+            {nivelDe(form.rol) === 1 ? (
               <label>PIN (4 a 6 dígitos)
                 <input value={form.pin} inputMode="numeric" maxLength={6} placeholder="0000"
                        onChange={e => setForm({ ...form, pin: e.target.value.replace(/\D/g, '') })} />
@@ -131,11 +161,34 @@ export default function Usuarios() {
         </div>
       )}
 
+      {nuevoRol && (
+        <div className="usu-form">
+          <b>Nuevo rol</b>
+          <div className="usu-grid">
+            <label>Nombre del rol
+              <input value={nuevoRol.nombre} autoFocus placeholder="Jefe de turno, Calidad…"
+                     onChange={e => setNuevoRol({ ...nuevoRol, nombre: e.target.value })} />
+            </label>
+            <label>Nivel
+              <select value={nuevoRol.nivel}
+                      onChange={e => setNuevoRol({ ...nuevoRol, nivel: Number(e.target.value) })}>
+                {NIVELES.map(n => <option key={n.n} value={n.n}>{n.texto}</option>)}
+              </select>
+            </label>
+          </div>
+          <div className="usu-acciones">
+            <button className="ghost" onClick={() => setNuevoRol(null)}>Cancelar</button>
+            <button className="btn-go small" onClick={crearRol}
+                    disabled={guardando || !nuevoRol.nombre.trim()}>Crear rol</button>
+          </div>
+        </div>
+      )}
+
       {clave && (
         <div className="usu-form">
           <b>Clave de {clave.user.nombre}</b>
           <div className="usu-grid">
-            {clave.user.rol === 'operador' ? (
+            {nivelDe(clave.user.rol) === 1 ? (
               <label>PIN nuevo
                 <input value={clave.pin} inputMode="numeric" maxLength={6} autoFocus placeholder="0000"
                        onChange={e => setClave({ ...clave, pin: e.target.value.replace(/\D/g, '') })} />
@@ -160,9 +213,9 @@ export default function Usuarios() {
             <div className="grow">
               <b>{u.nombre}</b>
               <small>
-                {ROLES_UI.find(r => r.id === u.rol)?.nombre || u.rol}
+                {nombreRol(u.rol)}
                 {u.email ? ` · ${u.email}` : ''}
-                {u.rol === 'operador' ? (u.tiene_pin ? ' · con PIN' : ' · sin PIN') : ''}
+                {nivelDe(u.rol) === 1 ? (u.tiene_pin ? ' · con PIN' : ' · sin PIN') : ''}
                 {u.activo ? '' : ' · inactivo'}
               </small>
             </div>
@@ -171,7 +224,7 @@ export default function Usuarios() {
             </button>
             <button className="btn-ghost"
                     onClick={() => setClave({ user: u, pin: '', pass: '' })}>
-              {u.rol === 'operador' ? 'PIN' : 'Clave'}
+              {nivelDe(u.rol) === 1 ? 'PIN' : 'Clave'}
             </button>
             <button className="btn-ghost" onClick={() => alternarActivo(u)}>
               {u.activo ? 'Desactivar' : 'Activar'}
@@ -183,7 +236,8 @@ export default function Usuarios() {
 
       <p className="set-hint">
         Los operadores entran a la tablet con su PIN; los supervisores y el administrador, con correo y
-        contraseña. Un operador sólo registra paradas: no arma el turno ni edita catálogos.
+        contraseña. Un rol de nivel 1 sólo registra paradas; nivel 2 arma el turno y ve el análisis; nivel 3
+        además edita catálogos y usuarios. Podés crear roles nuevos con el nivel que corresponda.
       </p>
     </>
   );

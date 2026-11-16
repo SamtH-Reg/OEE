@@ -60,17 +60,16 @@ const RUTAS_LIBRES = ['/api/login', '/api/login-pin', '/api/health'];
 // Qué rol mínimo pide cada ruta (el admin puede todo).
 function rolMinimo(url, metodo) {
   const m = metodo || 'GET';
-  if (url.startsWith('/api/usuarios')) return 'admin';
-  if (/^\/api\/(areas|maquinas|causas|especies|productos|demo|simulacion)/.test(url) && m !== 'GET') return 'admin';
-  if (/^\/api\/(areas|maquinas|causas|especies|productos)/.test(url) && m !== 'GET') return 'admin';
-  if (url.startsWith('/api/settings')) return 'supervisor';
-  if (url.startsWith('/api/analisis')) return 'supervisor';
-  if (url.startsWith('/api/turnos')) return 'supervisor';
-  if (url.startsWith('/api/procesos') && m !== 'GET') return 'supervisor';
-  if (url.startsWith('/api/recetas')) return 'supervisor';
-  if (url.startsWith('/api/lineas') && m !== 'GET') return 'supervisor';
-  if (url.startsWith('/api/historial')) return 'supervisor';
-  return 'operador';
+  if (url.startsWith('/api/usuarios') || url.startsWith('/api/roles')) return 3;
+  if (/^\/api\/(areas|maquinas|causas|especies|productos|demo|simulacion)/.test(url) && m !== 'GET') return 3;
+  if (url.startsWith('/api/settings')) return 2;
+  if (url.startsWith('/api/analisis')) return 2;
+  if (url.startsWith('/api/turnos')) return 2;
+  if (url.startsWith('/api/procesos') && m !== 'GET') return 2;
+  if (url.startsWith('/api/recetas')) return 2;
+  if (url.startsWith('/api/lineas') && m !== 'GET') return 2;
+  if (url.startsWith('/api/historial')) return 2;
+  return 1;
 }
 
 app.addHook('onRequest', async (req, reply) => {
@@ -83,9 +82,10 @@ app.addHook('onRequest', async (req, reply) => {
   const sesion = verificarToken(token);
   if (!sesion) return reply.code(401).send({ error: 'sesión vencida, volvé a entrar' });
 
-  req.usuario = sesion;                                     // { id, nombre, rol }
+  req.usuario = sesion;                                     // { id, nombre, rol, nivel }
   const minimo = rolMinimo(url, req.method);
-  if ((ROLES[sesion.rol] || 0) < ROLES[minimo]) {
+  const nivel = Number(sesion.nivel) || ROLES[sesion.rol] || 0;
+  if (nivel < minimo) {
     return reply.code(403).send({ error: 'tu rol no tiene permiso para esto' });
   }
 });
@@ -108,7 +108,9 @@ app.post('/api/login', async (req, reply) => {
       return reply.code(429).send({ error: 'usuario bloqueado por intentos fallidos' });
     }
     await q('update usuarios set ultimo_acceso = now(), intentos = 0, bloqueado_hasta = null where id = $1', [u.id]);
-    const datos = { id: u.id, nombre: u.nombre, rol: u.rol, email: u.email };
+    const nr = await q('select nivel from roles where codigo = $1', [u.rol]);
+    const datos = { id: u.id, nombre: u.nombre, rol: u.rol, email: u.email,
+                    nivel: nr.rows[0] ? nr.rows[0].nivel : (ROLES[u.rol] || 1) };
     return { token: firmarToken(datos), usuario: datos, expira_en_dias: DIAS_TOKEN };
   } catch (e) {
     return reply.code(400).send({ error: e.message });
@@ -120,17 +122,19 @@ app.post('/api/login-pin', async (req, reply) => {
   if (!pinValido(pin)) return reply.code(400).send({ error: 'PIN inválido' });
   try {
     const r = await q(
-      `select * from usuarios
-        where activo and pin_hash is not null
-          and (bloqueado_hasta is null or bloqueado_hasta < now())
-        order by rol desc, nombre`);
+      `select u.*, coalesce(ro.nivel, 1) as nivel
+         from usuarios u left join roles ro on ro.codigo = u.rol
+        where u.activo and u.pin_hash is not null
+          and (u.bloqueado_hasta is null or u.bloqueado_hasta < now())
+        order by ro.nivel desc, u.nombre`);
     let encontrado = null;
     for (const u of r.rows) {
       if (verificarSecreto(pin, u.pin_hash)) { encontrado = u; break; }
     }
     if (!encontrado) return reply.code(401).send({ error: 'PIN incorrecto' });
     await q('update usuarios set ultimo_acceso = now() where id = $1', [encontrado.id]);
-    const datos = { id: encontrado.id, nombre: encontrado.nombre, rol: encontrado.rol };
+    const datos = { id: encontrado.id, nombre: encontrado.nombre, rol: encontrado.rol,
+                    nivel: encontrado.nivel || 1 };
     return { token: firmarToken(datos), usuario: datos, expira_en_dias: DIAS_TOKEN };
   } catch (e) {
     return reply.code(400).send({ error: e.message });
@@ -138,8 +142,33 @@ app.post('/api/login-pin', async (req, reply) => {
 });
 
 app.get('/api/me', async (req) => {
-  const r = await q('select id, nombre, email, rol, activo from usuarios where id = $1', [req.usuario.id]);
+  const r = await q(
+    `select u.id, u.nombre, u.email, u.rol, u.activo, coalesce(ro.nivel, 1) as nivel
+       from usuarios u left join roles ro on ro.codigo = u.rol
+      where u.id = $1`, [req.usuario.id]);
   return r.rows[0] || req.usuario;
+});
+
+// ---- roles: catálogo con nivel (1 operador, 2 supervisor, 3 administrador) ----
+app.get('/api/roles', async () => {
+  const r = await q('select codigo, nombre, nivel from roles order by nivel, nombre');
+  return { roles: r.rows };
+});
+
+app.post('/api/roles', async (req, reply) => {
+  const b = req.body || {};
+  const nombre = texto(b.nombre, 40);
+  const nivel = Number(b.nivel);
+  if (!nombre) return reply.code(400).send({ error: 'poné un nombre para el rol' });
+  if (![1, 2, 3].includes(nivel)) return reply.code(400).send({ error: 'elegí el nivel del rol' });
+  try {
+    const r = await q(
+      'insert into roles (codigo, nombre, nivel) values ($1, $2, $3) returning codigo, nombre, nivel',
+      [slug(nombre), nombre, nivel]);
+    return r.rows[0];
+  } catch (e) {
+    return reply.code(400).send({ error: e.code === '23505' ? 'ya existe un rol con ese nombre' : e.message });
+  }
 });
 
 app.get('/api/usuarios', async () => {
@@ -153,8 +182,10 @@ app.post('/api/usuarios', async (req, reply) => {
   const b = req.body || {};
   const nombre = texto(b.nombre);
   const email = texto(b.email) ? String(b.email).trim().toLowerCase() : null;
-  const rol = ['admin', 'supervisor', 'operador'].includes(b.rol) ? b.rol : 'operador';
+  const rol = texto(b.rol, 40) || 'operador';
   if (!nombre) return reply.code(400).send({ error: 'el nombre es obligatorio' });
+  const rolOk = await q('select 1 from roles where codigo = $1', [rol]);
+  if (!rolOk.rowCount) return reply.code(400).send({ error: 'ese rol no existe' });
   if (b.pin && !pinValido(b.pin)) return reply.code(400).send({ error: 'el PIN debe tener 4 a 6 dígitos' });
   if (rol === 'admin' && !b.pass) return reply.code(400).send({ error: 'un administrador necesita contraseña' });
   try {
@@ -1350,12 +1381,46 @@ app.get('/api/monitor', async () => {
   return { turno, paradas: p.rows, cortes: c.rows, ahora };
 });
 
+// Archivar / desarchivar un proceso (deja de aparecer en el selector del turno)
+app.post('/api/recetas/:id/archivar', async (req, reply) => {
+  const id = Number(req.params.id);
+  const archivada = (req.body || {}).archivada !== false;
+  try {
+    const r = await q('update recetas set archivada = $2 where id = $1 returning id, archivada',
+      [id, archivada]);
+    if (!r.rowCount) return reply.code(404).send({ error: 'proceso no existe' });
+    return r.rows[0];
+  } catch (e) {
+    return reply.code(400).send({ error: e.message });
+  }
+});
+
+// Archivar una línea del turno: cierra sus paradas abiertas (el proceso terminó)
+// y el cliente la saca del armado. El historial queda intacto.
+app.post('/api/lineas/:id/archivar', async (req, reply) => {
+  const lineaId = Number(req.params.id);
+  if (!Number.isInteger(lineaId)) return reply.code(400).send({ error: 'línea inválida' });
+  try {
+    const r = await q(`
+      update registro_paradas p
+         set estado = 'cerrada',
+             hora_fin = greatest(p.hora_inicio + interval '1 minute', now()),
+             cerrado_por = $2
+       where p.estado = 'activa'
+         and p.maquina_id in (select lm.maquina_id from linea_maquinas lm where lm.linea_id = $1)
+      returning p.id`, [lineaId, texto((req.body || {}).usuario, 80) || 'archivo']);
+    return { ok: true, cerradas: r.rowCount };
+  } catch (e) {
+    return reply.code(400).send({ error: e.message });
+  }
+});
+
 // Lista de procesos para el operador
 app.get('/api/procesos', async () => {
   const r = await q(`select v.id, v.codigo, v.nombre, v.especie, v.producto,
                             v.linea_id, v.linea_codigo,
                             (select count(*) from receta_etapas e where e.receta_id = v.id)::int as etapas
-                       from v_recetas v where v.activa order by v.nombre`);
+                       from v_recetas v where v.activa and not v.archivada order by v.nombre`);
   const etapas = await q(`select receta_id, tipo, linea_id from receta_etapas where tipo = 'linea'`);
   const procesos = r.rows.map(p => {
     const lineas = etapas.rows.filter(e => e.receta_id === p.id).map(e => e.linea_id);

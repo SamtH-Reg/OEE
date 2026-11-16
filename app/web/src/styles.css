@@ -1536,3 +1536,11 @@ header{padding-top:env(safe-area-inset-top, 0px)}
 }
 .usu-acciones{display:flex;justify-content:flex-end;gap:10px;margin-top:12px}
 @media (max-width:980px){ .usu-grid{grid-template-columns:1fr} }
+
+/* archivar la línea del turno */
+.btn-archivar{
+  height:44px;padding:0 16px;border-radius:10px;border:1px solid var(--line2);background:#fff;
+  color:var(--muted);font:600 13.5px inherit;cursor:pointer;
+}
+.btn-archivar:hover{background:var(--panel2);color:var(--ink)}
+@media (pointer:coarse){ .btn-archivar{height:50px;min-height:50px} }

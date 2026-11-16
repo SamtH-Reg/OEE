@@ -59,8 +59,9 @@ export default function App({ usuario, onSalir }) {
 
   // Qué puede hacer cada rol: operador registra paradas; supervisor arma el turno
   // y ve el análisis; administrador además edita catálogos y usuarios.
-  const puedeSupervisar = (ROLES[usuario?.rol] || 0) >= ROLES.supervisor;
-  const esAdmin = usuario?.rol === 'admin';
+  const nivel = Number(usuario?.nivel) || ROLES[usuario?.rol] || 0;
+  const puedeSupervisar = nivel >= 2;
+  const esAdmin = nivel >= 3;
 
   const [ajustes, setAjustes] = useState(false);
   const [analisis, setAnalisis] = useState(false);
@@ -441,6 +442,32 @@ export default function App({ usuario, onSalir }) {
         detalle: `salió ${conf.salen.map(s => s.nombre).join(' y ')}`
       });
       pedirHorasDelCorte();
+    }
+  }
+
+  // Archivar la línea del turno: cierra sus paradas abiertas y la saca del
+  // armado para que no siga en pantalla (el historial queda en el análisis).
+  async function archivarLinea() {
+    if (!lineaActual) return;
+    const nombre = lineaActual.nombre;
+    const id = lineaActual.linea_id;
+    try {
+      await api.archivarLinea(id, usuario?.nombre);
+      const seleccion = lineasSel.filter(x => x !== id);
+      if (seleccion.length) {
+        const ok = await guardarTurnoCon(seleccion);
+        if (!ok) return;
+      } else if (cat?.turno) {
+        await api.setProcesoTurno(cat.turno.id, null);
+        setProcesoId(null);
+        setLineasSel([]);
+      }
+      setSel('todas');
+      await refrescar();
+      api.monitor().then(setMonitor).catch(() => {});
+      setToast({ titulo: 'Línea archivada', detalle: `${nombre} salió del turno` });
+    } catch (e) {
+      setError(e.message);
     }
   }
 
@@ -1707,6 +1734,12 @@ export default function App({ usuario, onSalir }) {
                   {puedeSupervisar && (
                   <button className="btn-ajustar-horas" onClick={abrirAjusteHoras}
                           title="Corregir desde/hasta del corte de proceso">Ajustar horas</button>
+                  )}
+                  {puedeSupervisar && (
+                  <button className="btn-archivar" onClick={archivarLinea}
+                          title="Cierra el proceso de esta línea y la saca del turno">
+                    Archivar
+                  </button>
                   )}
                   {procesoId && (
                     <button className="volver-planta" onClick={() => setSel('p:' + procesoId)}>

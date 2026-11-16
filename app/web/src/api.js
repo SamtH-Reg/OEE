@@ -49,6 +49,8 @@ export const api = {
   crearUsuario: (b) => req('/api/usuarios', { method: 'POST', body: JSON.stringify(b) }),
   editarUsuario: (id, b) => req(`/api/usuarios/${id}`, { method: 'PUT', body: JSON.stringify(b) }),
   claveUsuario: (id, b) => req(`/api/usuarios/${id}/clave`, { method: 'POST', body: JSON.stringify(b) }),
+  roles: () => req('/api/roles'),
+  crearRol: (b) => req('/api/roles', { method: 'POST', body: JSON.stringify(b) }),
 
   catalogo: () => req('/api/catalogo'),
   tablero: () => req('/api/tablero'),
@@ -60,6 +62,8 @@ export const api = {
     }),
   moverEquipo: (lineaId, b) =>
     req(`/api/lineas/${lineaId}/mover-equipo`, { method: 'POST', body: JSON.stringify(b) }),
+  archivarLinea: (lineaId, usuario) =>
+    req(`/api/lineas/${lineaId}/archivar`, { method: 'POST', body: JSON.stringify({ usuario }) }),
   sync: (body) => req('/api/sync', { method: 'POST', body: JSON.stringify(body) }),
   settings: () => req('/api/settings'),
   crearLinea: (b) => req('/api/lineas', { method: 'POST', body: JSON.stringify(b) }),
@@ -80,6 +84,8 @@ export const api = {
   crearReceta: (b) => req('/api/recetas', { method: 'POST', body: JSON.stringify(b) }),
   editarReceta: (id, b) => req(`/api/recetas/${id}`, { method: 'PUT', body: JSON.stringify(b) }),
   guardarEtapas: (id, etapas) => req(`/api/recetas/${id}/etapas`, { method: 'PUT', body: JSON.stringify({ etapas }) }),
+  archivarReceta: (id, archivada = true) =>
+    req(`/api/recetas/${id}/archivar`, { method: 'POST', body: JSON.stringify({ archivada }) }),
   proceso: (id) => req(`/api/recetas/${id}/proceso`),
   procesos: () => req('/api/procesos'),
   monitor: () => req('/api/monitor'),

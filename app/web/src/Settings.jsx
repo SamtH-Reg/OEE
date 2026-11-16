@@ -499,7 +499,7 @@ export default function Settings({ onClose, onTrama, onSaved }) {
             </div>
             <div className="set-list">
               {data.recetas.map(r => (
-                <div className={`set-row ${r.activa ? '' : 'off'}`} key={r.id}>
+                <div className={`set-row ${r.activa && !r.archivada ? '' : 'off'}`} key={r.id}>
                   <span className="badge sm">{r.codigo}</span>
                   <div className="grow">
                     <b>{r.nombre}</b>
@@ -508,10 +508,21 @@ export default function Settings({ onClose, onTrama, onSaved }) {
                       {' · '}{r.linea_codigo || 'sin línea'}
                       {r.toneladas_turno ? ` · ${Number(r.toneladas_turno)} t/turno` : ''}
                       {` · ${r.maquinas} máq.`}
+                      {r.archivada ? ' · archivado' : ''}
                       {r.activa ? '' : ' · inactiva'}
                     </small>
                   </div>
                   <button className="btn-ghost" onClick={() => abrir('receta', r)}>Editar</button>
+                  <button className="btn-ghost"
+                          onClick={async () => {
+                            try {
+                              await api.archivarReceta(r.id, !r.archivada);
+                              await cargar();
+                              onSaved && onSaved();
+                            } catch (e) { setError(e.message); }
+                          }}>
+                    {r.archivada ? 'Restaurar' : 'Archivar'}
+                  </button>
                 </div>
               ))}
             </div>
