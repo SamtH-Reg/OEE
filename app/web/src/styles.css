@@ -1595,3 +1595,10 @@ header{padding-top:env(safe-area-inset-top, 0px)}
   padding:6px 8px;border-radius:6px
 }
 .set-row.en-turno{border-left:4px solid #12A35E;padding-left:12px;background:#F3FBF6}
+
+/* deslizar hacia abajo para actualizar */
+.ptirar{
+  position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:120;
+  padding:9px 16px;border-radius:999px;background:var(--ink);color:#fff;
+  font:600 13px inherit;box-shadow:0 12px 28px -14px rgba(15,27,39,.6);pointer-events:none
+}

@@ -104,6 +104,58 @@ function usePinch(setScale, { min = 0.4, max = 2.4, getScale } = {}) {
   }, []);
 }
 
+// Deslizar hacia abajo desde el tope para recargar la app: en la tablet instalada
+// no hay botón de refresh del navegador, y así se trae la última versión desplegada.
+function usePullRefresh(umbral = 70) {
+  const [tirando, setTirando] = useState(0);
+  const [listo, setListo] = useState(false);
+  const d = useRef(0);
+  useEffect(() => {
+    const scrollerDe = el => {
+      let e = el;
+      while (e && e !== document.body) {
+        const cs = getComputedStyle(e);
+        if (/(auto|scroll)/.test(cs.overflowY) && e.scrollHeight > e.clientHeight + 1) return e;
+        e = e.parentElement;
+      }
+      return null;
+    };
+    let y0 = null, activo = false;
+    const onStart = e => {
+      if (e.touches.length !== 1) { activo = false; return; }
+      const sc = scrollerDe(e.target);
+      const arriba = sc ? sc.scrollTop <= 0 : (window.scrollY || document.documentElement.scrollTop || 0) <= 0;
+      if (!arriba) { activo = false; return; }
+      y0 = e.touches[0].clientY; activo = true;
+    };
+    const onMove = e => {
+      if (!activo || y0 == null || e.touches.length !== 1) return;
+      const dy = e.touches[0].clientY - y0;
+      if (dy <= 0) { d.current = 0; setTirando(0); setListo(false); return; }
+      if (dy > 6 && e.cancelable) e.preventDefault();
+      const v = Math.min(120, dy * 0.9);
+      d.current = v;
+      setTirando(v);
+      setListo(v >= umbral);
+    };
+    const onEnd = () => {
+      if (activo && d.current >= umbral) { setTirando(60); location.reload(); return; }
+      activo = false; y0 = null; d.current = 0; setTirando(0); setListo(false);
+    };
+    window.addEventListener('touchstart', onStart, { passive: true });
+    window.addEventListener('touchmove', onMove, { passive: false });
+    window.addEventListener('touchend', onEnd);
+    window.addEventListener('touchcancel', onEnd);
+    return () => {
+      window.removeEventListener('touchstart', onStart);
+      window.removeEventListener('touchmove', onMove);
+      window.removeEventListener('touchend', onEnd);
+      window.removeEventListener('touchcancel', onEnd);
+    };
+  }, [umbral]);
+  return { tirando, listo };
+}
+
 // un color por bloque de origen, para seguir las conexiones de un vistazo
 const PALETA = ['#2F80ED', '#27AE60', '#E58E26', '#9B51E0', '#EB5757',
                 '#00A3A3', '#C77DFF', '#B8860B', '#4C6EF5', '#E64980'];
@@ -158,6 +210,7 @@ export default function App({ usuario, onSalir }) {
 
   const [ajustes, setAjustes] = useState(false);        // true | 'archivados'
   const [confirmarArchivo, setConfirmarArchivo] = useState(null);  // {id, nombre}
+  const { tirando, listo } = usePullRefresh(70);
   const [analisis, setAnalisis] = useState(false);
   const [sheet, setSheet] = useState(null);
   const [editor, setEditor] = useState(null);
@@ -1661,6 +1714,9 @@ export default function App({ usuario, onSalir }) {
           <svg viewBox="0 0 24 24"><path d="M4 20V11M9.5 20V5M15 20v-6M20.5 20V8" /></svg>
         </button>
         )}
+        <button className="gear" onClick={() => location.reload()} title="Actualizar la app" aria-label="Actualizar">
+          <svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v5h-5" /></svg>
+        </button>
         {esAdmin && (
         <button className="gear" onClick={() => setAjustes(true)} title="Ajustes de planta" aria-label="Ajustes">
           <svg viewBox="0 0 24 24">{ICONOS.engranaje && <path d={ICONOS.engranaje} />}</svg>
@@ -2474,6 +2530,12 @@ export default function App({ usuario, onSalir }) {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {tirando > 0 && (
+        <div className="ptirar" style={{ opacity: Math.min(1, tirando / 50), transform: `translateY(${Math.max(0, tirando - 40)}px)` }}>
+          {listo ? 'Soltá para actualizar' : 'Deslizá para actualizar'}
         </div>
       )}
 
