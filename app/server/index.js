@@ -3,6 +3,10 @@ import fastifyStatic from '@fastify/static';
 import pg from 'pg';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  hashSecreto, verificarSecreto, firmarToken, verificarToken,
+  ROLES, pinValido, DIAS_TOKEN
+} from './auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 8787);
@@ -20,16 +24,192 @@ const pool = new pg.Pool({
 });
 
 const app = Fastify({ logger: { level: 'warn' } });
+const q = (sql, params) => pool.query(sql, params);
 
-// Identidad mínima de la tablet. En producción: JWT de turno.
-const token = process.env.APP_TOKEN || 'demo';
+// ---------------------------------------------------------------------------
+// Usuarios y sesiones: admin con correo y contraseña, operadores con PIN.
+// El token (JWT HS256) viaja en Authorization: Bearer y dura 30 días.
+// ---------------------------------------------------------------------------
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'jhuequen@friosur.cl';
+const ADMIN_PASS = process.env.ADMIN_PASS || 'capricornio1988';
+const ADMIN_NOMBRE = process.env.ADMIN_NOMBRE || 'José Huequén';
+
+async function asegurarAdmin() {
+  try {
+    const ya = await q("select id from usuarios where rol = 'admin' limit 1");
+    if (ya.rowCount) return;
+    await q(
+      `insert into usuarios (nombre, email, rol, pass_hash, activo)
+       values ($1, lower($2), 'admin', $3, true)
+       on conflict (email) do nothing`,
+      [ADMIN_NOMBRE, ADMIN_EMAIL, hashSecreto(ADMIN_PASS)]);
+    console.log('usuario administrador creado:', ADMIN_EMAIL);
+  } catch (e) {
+    console.error('no se pudo crear el administrador:', e.message);
+  }
+}
+
+const RUTAS_LIBRES = ['/api/login', '/api/login-pin', '/api/health'];
+
+// Qué rol mínimo pide cada ruta (el admin puede todo).
+function rolMinimo(url, metodo) {
+  const m = metodo || 'GET';
+  if (url.startsWith('/api/usuarios')) return 'admin';
+  if (/^\/api\/(areas|maquinas|causas|especies|productos|demo|simulacion)/.test(url) && m !== 'GET') return 'admin';
+  if (/^\/api\/(areas|maquinas|causas|especies|productos)/.test(url) && m !== 'GET') return 'admin';
+  if (url.startsWith('/api/settings')) return 'supervisor';
+  if (url.startsWith('/api/analisis')) return 'supervisor';
+  if (url.startsWith('/api/turnos')) return 'supervisor';
+  if (url.startsWith('/api/procesos') && m !== 'GET') return 'supervisor';
+  if (url.startsWith('/api/recetas')) return 'supervisor';
+  if (url.startsWith('/api/lineas') && m !== 'GET') return 'supervisor';
+  if (url.startsWith('/api/historial')) return 'supervisor';
+  return 'operador';
+}
+
 app.addHook('onRequest', async (req, reply) => {
-  if (req.url.startsWith('/api/') && req.headers['x-app-token'] !== token) {
-    return reply.code(401).send({ error: 'token inválido' });
+  const url = String(req.url || '').split('?')[0];
+  if (!url.startsWith('/api/')) return;                     // assets y SPA
+  if (RUTAS_LIBRES.includes(url)) return;
+
+  const cabecera = req.headers.authorization || '';
+  const token = cabecera.startsWith('Bearer ') ? cabecera.slice(7) : null;
+  const sesion = verificarToken(token);
+  if (!sesion) return reply.code(401).send({ error: 'sesión vencida, volvé a entrar' });
+
+  req.usuario = sesion;                                     // { id, nombre, rol }
+  const minimo = rolMinimo(url, req.method);
+  if ((ROLES[sesion.rol] || 0) < ROLES[minimo]) {
+    return reply.code(403).send({ error: 'tu rol no tiene permiso para esto' });
   }
 });
 
-const q = (sql, params) => pool.query(sql, params);
+// ---- login y usuarios ----
+app.get('/api/health', async () => ({ ok: true, ahora: new Date().toISOString() }));
+
+app.post('/api/login', async (req, reply) => {
+  const b = req.body || {};
+  const email = String(b.email || '').trim().toLowerCase();
+  const pass = String(b.pass || '');
+  if (!email || !pass) return reply.code(400).send({ error: 'correo y contraseña son obligatorios' });
+  try {
+    const r = await q('select * from usuarios where lower(email) = $1 limit 1', [email]);
+    const u = r.rows[0];
+    if (!u || !u.activo || !u.pass_hash || !verificarSecreto(pass, u.pass_hash)) {
+      return reply.code(401).send({ error: 'correo o contraseña incorrectos' });
+    }
+    if (u.bloqueado_hasta && new Date(u.bloqueado_hasta) > new Date()) {
+      return reply.code(429).send({ error: 'usuario bloqueado por intentos fallidos' });
+    }
+    await q('update usuarios set ultimo_acceso = now(), intentos = 0, bloqueado_hasta = null where id = $1', [u.id]);
+    const datos = { id: u.id, nombre: u.nombre, rol: u.rol, email: u.email };
+    return { token: firmarToken(datos), usuario: datos, expira_en_dias: DIAS_TOKEN };
+  } catch (e) {
+    return reply.code(400).send({ error: e.message });
+  }
+});
+
+app.post('/api/login-pin', async (req, reply) => {
+  const pin = String((req.body || {}).pin || '');
+  if (!pinValido(pin)) return reply.code(400).send({ error: 'PIN inválido' });
+  try {
+    const r = await q(
+      `select * from usuarios
+        where activo and pin_hash is not null
+          and (bloqueado_hasta is null or bloqueado_hasta < now())
+        order by rol desc, nombre`);
+    let encontrado = null;
+    for (const u of r.rows) {
+      if (verificarSecreto(pin, u.pin_hash)) { encontrado = u; break; }
+    }
+    if (!encontrado) return reply.code(401).send({ error: 'PIN incorrecto' });
+    await q('update usuarios set ultimo_acceso = now() where id = $1', [encontrado.id]);
+    const datos = { id: encontrado.id, nombre: encontrado.nombre, rol: encontrado.rol };
+    return { token: firmarToken(datos), usuario: datos, expira_en_dias: DIAS_TOKEN };
+  } catch (e) {
+    return reply.code(400).send({ error: e.message });
+  }
+});
+
+app.get('/api/me', async (req) => {
+  const r = await q('select id, nombre, email, rol, activo from usuarios where id = $1', [req.usuario.id]);
+  return r.rows[0] || req.usuario;
+});
+
+app.get('/api/usuarios', async () => {
+  const r = await q(`select id, nombre, email, rol, activo, creado_en, ultimo_acceso,
+                            (pin_hash is not null) as tiene_pin
+                       from usuarios order by rol, nombre`);
+  return { usuarios: r.rows };
+});
+
+app.post('/api/usuarios', async (req, reply) => {
+  const b = req.body || {};
+  const nombre = texto(b.nombre);
+  const email = texto(b.email) ? String(b.email).trim().toLowerCase() : null;
+  const rol = ['admin', 'supervisor', 'operador'].includes(b.rol) ? b.rol : 'operador';
+  if (!nombre) return reply.code(400).send({ error: 'el nombre es obligatorio' });
+  if (b.pin && !pinValido(b.pin)) return reply.code(400).send({ error: 'el PIN debe tener 4 a 6 dígitos' });
+  if (rol === 'admin' && !b.pass) return reply.code(400).send({ error: 'un administrador necesita contraseña' });
+  try {
+    const r = await q(
+      `insert into usuarios (nombre, email, rol, pass_hash, pin_hash, activo)
+       values ($1, $2, $3, $4, $5, true)
+       returning id, nombre, email, rol, activo, (pin_hash is not null) as tiene_pin`,
+      [nombre, email, rol,
+       b.pass ? hashSecreto(b.pass) : null,
+       b.pin ? hashSecreto(String(b.pin)) : null]);
+    return r.rows[0];
+  } catch (e) {
+    return reply.code(400).send({ error: e.code === '23505' ? 'ese correo ya está en uso' : e.message });
+  }
+});
+
+app.put('/api/usuarios/:id', async (req, reply) => {
+  const b = req.body || {};
+  const id = Number(req.params.id);
+  try {
+    const r = await q(
+      `update usuarios set
+          nombre = coalesce($2, nombre),
+          email  = coalesce(lower($3), email),
+          rol    = coalesce($4, rol),
+          activo = coalesce($5, activo)
+        where id = $1
+        returning id, nombre, email, rol, activo, (pin_hash is not null) as tiene_pin`,
+      [id, texto(b.nombre) || null,
+       b.email === undefined ? null : (String(b.email || '').trim().toLowerCase() || null),
+       ['admin', 'supervisor', 'operador'].includes(b.rol) ? b.rol : null,
+       b.activo === undefined ? null : Boolean(b.activo)]);
+    if (!r.rowCount) return reply.code(404).send({ error: 'usuario no existe' });
+    return r.rows[0];
+  } catch (e) {
+    return reply.code(400).send({ error: e.code === '23505' ? 'ese correo ya está en uso' : e.message });
+  }
+});
+
+app.post('/api/usuarios/:id/clave', async (req, reply) => {
+  const b = req.body || {};
+  const id = Number(req.params.id);
+  if (!b.pin && !b.pass) return reply.code(400).send({ error: 'mandá un PIN o una contraseña' });
+  if (b.pin && !pinValido(b.pin)) return reply.code(400).send({ error: 'el PIN debe tener 4 a 6 dígitos' });
+  try {
+    const r = await q(
+      `update usuarios set
+          pin_hash  = case when $2 then $3 else pin_hash end,
+          pass_hash = case when $4 then $5 else pass_hash end
+        where id = $1
+        returning id, (pin_hash is not null) as tiene_pin`,
+      [id, Boolean(b.pin), b.pin ? hashSecreto(String(b.pin)) : null,
+       Boolean(b.pass), b.pass ? hashSecreto(String(b.pass)) : null]);
+    if (!r.rowCount) return reply.code(404).send({ error: 'usuario no existe' });
+    return r.rows[0];
+  } catch (e) {
+    return reply.code(400).send({ error: e.message });
+  }
+});
+
+asegurarAdmin();
 
 // En local, cada carga del HTML invalida la caché del navegador: evita quedarse
 // con un build viejo servido por el service worker.
@@ -1414,16 +1594,26 @@ app.post('/api/demo/eliminar', async (req, reply) => {
   }
 });
 
-// ---------------- PWA ----------------
-app.register(fastifyStatic, {
-  root: path.join(__dirname, '..', 'web', 'dist'),
-  prefix: '/'
-});
-app.setNotFoundHandler((req, reply) => {
-  if (req.url.startsWith('/api/')) return reply.code(404).send({ error: 'no existe' });
-  return reply.sendFile('index.html');
-});
+// ---------------- PWA / estáticos ----------------
+// En Vercel los archivos estáticos los sirve la plataforma y esta función sólo
+// atiende /api/*: el estático y el listen quedan para el arranque local.
+const EN_VERCEL = Boolean(process.env.VERCEL);
 
-app.listen({ port: PORT, host: '0.0.0.0' })
-  .then(() => console.log(`API + PWA en http://localhost:${PORT}`))
-  .catch(err => { console.error(err); process.exit(1); });
+if (!EN_VERCEL) {
+  app.register(fastifyStatic, {
+    root: path.join(__dirname, '..', 'web', 'dist'),
+    prefix: '/'
+  });
+  app.setNotFoundHandler((req, reply) => {
+    if (req.url.startsWith('/api/')) return reply.code(404).send({ error: 'no existe' });
+    return reply.sendFile('index.html');
+  });
+}
+
+export default app;
+
+if (!EN_VERCEL) {
+  app.listen({ port: PORT, host: '0.0.0.0' })
+    .then(() => console.log(`API + PWA en http://localhost:${PORT}`))
+    .catch(err => { console.error(err); process.exit(1); });
+}

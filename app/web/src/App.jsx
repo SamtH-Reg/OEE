@@ -3,7 +3,7 @@ import {
   db, guardarCatalogo, leerCatalogo, guardarTablero, leerTablero,
   encolar, deshacer
 } from './db';
-import { api } from './api';
+import { api, ROLES } from './api';
 import { arrancarSync } from './sync';
 import Settings from './Settings';
 import LineaRapida from './LineaRapida';
@@ -41,7 +41,7 @@ const minutos = (desde, ahora) => {
   return `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, '0')}`;
 }
 
-export default function App() {
+export default function App({ usuario, onSalir }) {
   const [cat, setCat] = useState(null);
   const [maqs, setMaqs] = useState([]);
   const [lineas, setLineas] = useState([]);
@@ -56,6 +56,11 @@ export default function App() {
 
   const [locales, setLocales] = useState({});   // maquina_id -> parada local
   const [cerradas, setCerradas] = useState([]); // uuids cerrados en esta sesión
+
+  // Qué puede hacer cada rol: operador registra paradas; supervisor arma el turno
+  // y ve el análisis; administrador además edita catálogos y usuarios.
+  const puedeSupervisar = (ROLES[usuario?.rol] || 0) >= ROLES.supervisor;
+  const esAdmin = usuario?.rol === 'admin';
 
   const [ajustes, setAjustes] = useState(false);
   const [analisis, setAnalisis] = useState(false);
@@ -1517,12 +1522,22 @@ export default function App() {
           <span>{pend === 0 ? 'sin pendientes' : `${pend} ${pend === 1 ? 'pendiente' : 'pendientes'}`}</span>
         </div>
 
+        {puedeSupervisar && (
         <button className="gear" onClick={() => setAnalisis(true)} title="Análisis de paradas" aria-label="Análisis">
           <svg viewBox="0 0 24 24"><path d="M4 20V11M9.5 20V5M15 20v-6M20.5 20V8" /></svg>
         </button>
+        )}
+        {esAdmin && (
         <button className="gear" onClick={() => setAjustes(true)} title="Ajustes de planta" aria-label="Ajustes">
           <svg viewBox="0 0 24 24">{ICONOS.engranaje && <path d={ICONOS.engranaje} />}</svg>
         </button>
+        )}
+
+        <div className="usuario-chip" title={`${usuario?.nombre || ''} · ${usuario?.rol || ''}`}>
+          <b>{(usuario?.nombre || '').split(' ')[0]}</b>
+          <small>{usuario?.rol}</small>
+        </div>
+        <button className="salir" onClick={onSalir} title="Salir">Salir</button>
 
         <div className="clock">
           <b>{new Date(ahora).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}</b>
@@ -1572,10 +1587,12 @@ export default function App() {
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9.5 6 6 6-6" /></svg>
             </button>
 
+            {puedeSupervisar && (
             <button className="btn-linea-nueva"
                     onClick={() => abrirLineaRapida([])}>
               ＋ Armar línea nueva
             </button>
+            )}
 
             {lineasAbierto && (
               <div className="lineas-lista">
@@ -1584,7 +1601,7 @@ export default function App() {
                   return (
                     <div key={l.linea_id} className={`lineas-op ${dentro ? 'on' : ''}`}>
                       <button className="lineas-toggle" aria-pressed={dentro}
-                              onClick={() => toggleLinea(l.linea_id)}>
+                              onClick={() => { if (puedeSupervisar) toggleLinea(l.linea_id); }}>
                         <span className={`line-check ${dentro ? 'on' : ''}`} aria-hidden="true">
                           {dentro ? '✓' : ''}
                         </span>
@@ -1608,7 +1625,7 @@ export default function App() {
             )}
 
             <button className="btn-guardar-proc ancho" onClick={guardarProcesoTurno}
-                    disabled={!lineasSel.length || !cambiosPendientes || turnoCerrado}>
+                    disabled={!lineasSel.length || !cambiosPendientes || turnoCerrado || !puedeSupervisar}>
               {cambiosPendientes ? 'Guardar cambios' : 'Guardado'}
             </button>
           </div>
@@ -1637,7 +1654,7 @@ export default function App() {
             </>
           )}
 
-          {lineaActual && (
+          {lineaActual && puedeSupervisar && (
             <button className="btn-edit" onClick={() => abrirEditor()}>
               <svg viewBox="0 0 24 24">
                 <path d="M4 20h4.5L19 9.5 14.5 5 4 15.5V20Z" />
@@ -1687,8 +1704,10 @@ export default function App() {
                           title="Registra una parada sobre el cuello de la línea: se detiene todo el proceso">
                     ■ Detener el proceso
                   </button>
+                  {puedeSupervisar && (
                   <button className="btn-ajustar-horas" onClick={abrirAjusteHoras}
                           title="Corregir desde/hasta del corte de proceso">Ajustar horas</button>
+                  )}
                   {procesoId && (
                     <button className="volver-planta" onClick={() => setSel('p:' + procesoId)}>
                       ← Tablero en vivo

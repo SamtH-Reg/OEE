@@ -27,7 +27,10 @@ export async function sincronizar(dispositivo_id = dispositivoId()) {
 
 // Ciclo de sincronización: al volver la red, al cambiar de pestaña y cada 12 s.
 // alCambiar(pendientes, hayRed)
-export async function arrancarSync(alCambiar) {
+// Devuelve la función para detener el ciclo. NO es async: si lo fuera, el
+// useEffect recibiría una Promise como cleanup y React revienta al desmontar
+// («destroy is not a function») — pasaba al cerrar sesión.
+export function arrancarSync(alCambiar) {
   const ciclo = async () => {
     if (!navigator.onLine) {
       alCambiar(await db.outbox.count(), false);

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from './api';
 import WizardLinea from './WizardLinea';
+import Usuarios from './Usuarios';
 
 const normalizar = (t) =>
   (t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -368,6 +369,7 @@ export default function Settings({ onClose, onTrama, onSaved }) {
           <button className={tab === 'equipos' ? 'on' : ''} onClick={() => setTab('equipos')}>Equipos</button>
           <button className={tab === 'recetas' ? 'on' : ''} onClick={() => setTab('recetas')}>Recetas</button>
           <button className={tab === 'fallas' ? 'on' : ''} onClick={() => setTab('fallas')}>Fallas</button>
+          <button className={tab === 'usuarios' ? 'on' : ''} onClick={() => setTab('usuarios')}>Usuarios</button>
           <button className={tab === 'datos' ? 'on' : ''} onClick={() => setTab('datos')}>Datos</button>
         </div>
         <button className="x" onClick={onClose}>✕</button>
@@ -563,6 +565,8 @@ export default function Settings({ onClose, onTrama, onSaved }) {
         )}
 
         {/* -------- datos de demostración -------- */}
+        {tab === 'usuarios' && <Usuarios />}
+
         {tab === 'datos' && demo && (
           <div className="demo-card">
             <h3>Datos de demostración</h3>

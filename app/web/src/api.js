@@ -1,18 +1,55 @@
-const TOKEN = 'demo';
+// Cliente de la API. La sesión vive en localStorage: token (JWT) + usuario.
+// Los operadores entran con PIN y el administrador con correo y contraseña.
+
+const CLAVE_TOKEN = 'paradas_token';
+const CLAVE_USUARIO = 'paradas_usuario';
+
+export const ROLES = { operador: 1, supervisor: 2, admin: 3 };
+
+export const sesion = {
+  token: () => localStorage.getItem(CLAVE_TOKEN),
+  usuario: () => {
+    try { return JSON.parse(localStorage.getItem(CLAVE_USUARIO) || 'null'); } catch { return null; }
+  },
+  guardar: (token, usuario) => {
+    if (token) localStorage.setItem(CLAVE_TOKEN, token);
+    if (usuario) localStorage.setItem(CLAVE_USUARIO, JSON.stringify(usuario));
+  },
+  borrar: () => {
+    localStorage.removeItem(CLAVE_TOKEN);
+    localStorage.removeItem(CLAVE_USUARIO);
+  },
+  puede: (rol) => {
+    const u = sesion.usuario();
+    return (ROLES[u?.rol] || 0) >= (ROLES[rol] || 0);
+  }
+};
 
 async function req(path, opciones = {}) {
   // el content-type solo va si hay cuerpo: Fastify rechaza un DELETE con
   // content-type json y body vacío
-  const headers = { 'x-app-token': TOKEN, ...(opciones.headers || {}) };
+  const headers = { ...(opciones.headers || {}) };
+  const token = sesion.token();
+  if (token) headers.authorization = `Bearer ${token}`;
   if (opciones.body) headers['content-type'] = 'application/json';
   const res = await fetch(path, { ...opciones, headers });
   const texto = await res.text();
   const data = texto ? JSON.parse(texto) : null;
+  if (res.status === 401) window.dispatchEvent(new CustomEvent('sesion-vencida'));
   if (!res.ok) throw new Error((data && data.error) || `HTTP ${res.status}`);
   return data;
 }
 
 export const api = {
+  // --- sesión y usuarios ---
+  login: (email, pass) => req('/api/login', { method: 'POST', body: JSON.stringify({ email, pass }) }),
+  loginPin: (pin) => req('/api/login-pin', { method: 'POST', body: JSON.stringify({ pin }) }),
+  me: () => req('/api/me'),
+  usuarios: () => req('/api/usuarios'),
+  crearUsuario: (b) => req('/api/usuarios', { method: 'POST', body: JSON.stringify(b) }),
+  editarUsuario: (id, b) => req(`/api/usuarios/${id}`, { method: 'PUT', body: JSON.stringify(b) }),
+  claveUsuario: (id, b) => req(`/api/usuarios/${id}/clave`, { method: 'POST', body: JSON.stringify(b) }),
+
   catalogo: () => req('/api/catalogo'),
   tablero: () => req('/api/tablero'),
   lineas: () => req('/api/lineas'),
