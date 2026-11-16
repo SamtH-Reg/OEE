@@ -16,8 +16,8 @@ const vacio = {
   }
 };
 
-export default function Settings({ onClose, onTrama, onSaved, tabInicial }) {
-  const [tab, setTab] = useState(tabInicial || 'lineas');
+export default function Settings({ onClose, onTrama, onSaved, tabInicial, soloArchivados }) {
+  const [tab, setTab] = useState(soloArchivados ? 'archivados' : (tabInicial || 'lineas'));
   const [data, setData] = useState(null);
   const procesoEnTurno = data?.turno?.proceso_id ? Number(data.turno.proceso_id) : null;
   const [form, setForm] = useState(null);      // {tipo, item, valores, error}
@@ -364,8 +364,10 @@ export default function Settings({ onClose, onTrama, onSaved, tabInicial }) {
   return (
     <div className="settings">
       <div className="set-head">
-        <h2>Ajustes de planta</h2>
+        <h2>{soloArchivados ? 'Archivados' : 'Ajustes de planta'}</h2>
         <div className="tabs">
+          {!soloArchivados && (<>
+
           <button className={tab === 'lineas' ? 'on' : ''} onClick={() => setTab('lineas')}>Líneas</button>
           <button className={tab === 'equipos' ? 'on' : ''} onClick={() => setTab('equipos')}>Equipos</button>
           <button className={tab === 'recetas' ? 'on' : ''} onClick={() => setTab('recetas')}>Recetas</button>
@@ -373,6 +375,12 @@ export default function Settings({ onClose, onTrama, onSaved, tabInicial }) {
           <button className={tab === 'fallas' ? 'on' : ''} onClick={() => setTab('fallas')}>Fallas</button>
           <button className={tab === 'usuarios' ? 'on' : ''} onClick={() => setTab('usuarios')}>Usuarios</button>
           <button className={tab === 'datos' ? 'on' : ''} onClick={() => setTab('datos')}>Datos</button>
+          </>)}
+          {soloArchivados && (
+            <span className="set-hint" style={{ alignSelf: 'center' }}>
+              Los procesos que se cerraron quedan acá
+            </span>
+          )}
         </div>
         <button className="x" onClick={onClose}>✕</button>
       </div>
@@ -523,12 +531,15 @@ export default function Settings({ onClose, onTrama, onSaved, tabInicial }) {
                     </small>
                   </div>
                   <button className="btn-ghost" onClick={() => abrir('receta', r)}>Editar</button>
-                  <button className="btn-ghost"
-                          disabled={procesoEnTurno === Number(r.id)}
+                  <button className={`btn-ghost ${procesoEnTurno === Number(r.id) ? 'bloqueado' : ''}`}
                           title={procesoEnTurno === Number(r.id)
-                            ? 'Es el proceso que está trabajando: cerralo desde el tablero de la línea'
+                            ? 'Está trabajando: se cierra desde el tablero de la línea (＋ → Archivar)'
                             : 'Sacarlo del selector del turno'}
                           onClick={async () => {
+                            if (procesoEnTurno === Number(r.id)) {
+                              setError(`${r.nombre} está trabajando en el turno: cerralo desde el tablero de la línea (＋ → Archivar).`);
+                              return;
+                            }
                             try {
                               await api.archivarReceta(r.id, true);
                               await cargar();

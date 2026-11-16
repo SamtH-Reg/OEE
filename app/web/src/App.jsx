@@ -616,7 +616,10 @@ export default function App({ usuario, onSalir }) {
       const seleccion = lineasSel.filter(x => x !== id);
       if (seleccion.length) {
         const ok = await guardarTurnoCon(seleccion);
-        if (!ok) return;
+        if (!ok) {
+          setError(`${nombre} se archivó, pero el turno no se pudo actualizar. Revisá los equipos en conflicto.`);
+          return;
+        }
       } else if (cat?.turno) {
         await api.setProcesoTurno(cat.turno.id, null);
         setProcesoId(null);
@@ -1783,7 +1786,7 @@ export default function App({ usuario, onSalir }) {
               ＋ Armar línea nueva
             </button>
             )}
-            {esAdmin && (
+            {puedeSupervisar && (
               <button className="btn-archivados" onClick={() => setAjustes('archivados')}
                       title="Ver los procesos archivados">
                 🗄 Archivados
@@ -2504,6 +2507,7 @@ export default function App({ usuario, onSalir }) {
       {ajustes && (
         <Settings
           tabInicial={ajustes === 'archivados' ? 'archivados' : 'lineas'}
+          soloArchivados={ajustes === 'archivados' && !esAdmin}
           onClose={() => { setAjustes(false); refrescar(); }}
           onSaved={refrescar}
           onTrama={(linea) => {

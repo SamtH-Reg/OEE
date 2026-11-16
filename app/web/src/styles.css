@@ -1602,3 +1602,6 @@ header{padding-top:env(safe-area-inset-top, 0px)}
   padding:9px 16px;border-radius:999px;background:var(--ink);color:#fff;
   font:600 13px inherit;box-shadow:0 12px 28px -14px rgba(15,27,39,.6);pointer-events:none
 }
+
+/* archivar bloqueado: se ve apagado pero explica al tocarlo */
+.btn-ghost.bloqueado{opacity:.55;border-style:dashed}
