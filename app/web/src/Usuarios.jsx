@@ -62,13 +62,17 @@ export default function Usuarios() {
     try {
       if (form.id) {
         await api.editarUsuario(form.id, { nombre: form.nombre, email: form.email, rol: form.rol });
+        if (form.pin || form.pass) {
+          await api.claveUsuario(form.id, { pin: form.pin || null, pass: form.pass || null });
+        }
       } else {
+        const esAdmin = nivelDe(form.rol) >= 3;
         await api.crearUsuario({
           nombre: form.nombre,
-          email: form.email || null,
+          email: esAdmin ? (form.email || null) : null,
           rol: form.rol,
-          pin: form.rol === 'operador' ? form.pin : null,
-          pass: form.rol === 'operador' ? null : form.pass
+          pin: esAdmin ? null : form.pin,
+          pass: esAdmin ? form.pass : null
         });
       }
       setForm(null);
@@ -137,24 +141,30 @@ export default function Usuarios() {
                 <option value="__nuevo">＋ Agregar nuevo rol…</option>
               </select>
             </label>
-            <label>Correo <em>(opcional)</em>
-              <input value={form.email} placeholder="nombre@friosur.cl"
-                     onChange={e => setForm({ ...form, email: e.target.value })} />
-            </label>
-            <label>PIN para la tablet <em>(4 a 6 dígitos)</em>
-              <input value={form.pin} inputMode="numeric" maxLength={6} placeholder="0000"
-                     onChange={e => setForm({ ...form, pin: e.target.value.replace(/\D/g, '') })} />
-            </label>
-            <label>
-              {nivelDe(form.rol) >= 3 ? 'Contraseña' : <>Contraseña <em>(para entrar con correo)</em></>}
-              <input type="password" value={form.pass} placeholder="••••••••"
-                     onChange={e => setForm({ ...form, pass: e.target.value })} />
-            </label>
+            {nivelDe(form.rol) >= 3 ? (
+              <>
+                <label>Correo
+                  <input value={form.email} placeholder="nombre@friosur.cl"
+                         onChange={e => setForm({ ...form, email: e.target.value })} />
+                </label>
+                <label>Contraseña
+                  <input type="password" value={form.pass} placeholder="••••••••"
+                         onChange={e => setForm({ ...form, pass: e.target.value })} />
+                </label>
+              </>
+            ) : (
+              <label>PIN para la tablet <em>(4 a 6 dígitos)</em>
+                <input value={form.pin} inputMode="numeric" maxLength={6} placeholder="0000"
+                       onChange={e => setForm({ ...form, pin: e.target.value.replace(/\D/g, '') })} />
+              </label>
+            )}
           </div>
           <div className="usu-acciones">
             <button className="ghost" onClick={() => setForm(null)}>Cancelar</button>
             <button className="btn-go small" onClick={guardar}
-                    disabled={guardando || !form.nombre.trim() || (!form.id && !form.pin && !form.pass)}>
+                    disabled={guardando || !form.nombre.trim()
+                      || (!form.id && nivelDe(form.rol) >= 3 && !(form.pass && form.email))
+                      || (!form.id && nivelDe(form.rol) < 3 && form.pin.length < 4)}>
               Guardar
             </button>
           </div>
@@ -232,9 +242,9 @@ export default function Usuarios() {
       </div>
 
       <p className="set-hint">
-        Los operadores entran a la tablet con su PIN; los supervisores y el administrador, con correo y
-        contraseña. Un rol de nivel 1 sólo registra paradas; nivel 2 arma el turno y ve el análisis; nivel 3
-        además edita catálogos y usuarios. Podés crear roles nuevos con el nivel que corresponda.
+        Todos los usuarios entran a la tablet con su PIN; sólo el administrador (nivel 3) entra además con
+        correo y contraseña. El nivel decide qué puede hacer: 1 registra paradas, 2 arma el turno y ve el
+        análisis, 3 además edita catálogos y usuarios.
       </p>
     </>
   );

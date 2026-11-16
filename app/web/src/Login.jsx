@@ -66,7 +66,7 @@ export default function Login({ onEntrar }) {
 
         <div className="login-tabs">
           <button className={modo === 'pin' ? 'on' : ''} onClick={() => { setModo('pin'); setError(null); }}>
-            Operador · PIN
+            Usuario · PIN
           </button>
           <button className={modo === 'clave' ? 'on' : ''} onClick={() => { setModo('clave'); setError(null); }}>
             Administrador
