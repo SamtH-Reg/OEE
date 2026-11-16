@@ -1178,6 +1178,9 @@ export default function App({ usuario, onSalir }) {
   // arrastrar la tarjeta libremente por el lienzo
   function iniciarMover(e, f) {
     if (e.button !== 0) return;
+    // en la tablet el dedo no arrastra: tocar la tarjeta la selecciona y muestra
+    // las sugerencias (arrastrar se sentía como que "todo se movía")
+    if (e.pointerType && e.pointerType !== 'mouse') return;
     if (e.target.closest && e.target.closest('.tf-port, button, input, select, label')) return;
     e.preventDefault();
     const x0 = e.clientX, y0 = e.clientY, ox = f.x, oy = f.y;
@@ -1629,6 +1632,7 @@ export default function App({ usuario, onSalir }) {
 
   // Arrastrar desde el puerto de salida para conectar (estilo n8n)
   function iniciarCable(e, desdeId, lado = 'der') {
+    if (e.pointerType && e.pointerType !== 'mouse') return;   // con el dedo: toque + destino
     e.preventDefault();
     e.stopPropagation();
     const cont = flowRef.current;
@@ -2258,8 +2262,8 @@ export default function App({ usuario, onSalir }) {
             <div>
               <h3>Trama · {editor.linea.nombre}</h3>
               <div className="sub">
-                Arrastrá las tarjetas para cambiar de etapa o de rama. Solo un cuello de botella,
-                y ese detiene la línea completa.
+                Tocá una tarjeta y elegí una sugerencia para conectarla (◀ ▶ la mueven de etapa).
+                Solo un cuello de botella, y ese detiene la línea completa.
               </div>
             </div>
             <button className="x" onClick={() => setEditor(null)}>✕</button>
@@ -2451,6 +2455,10 @@ export default function App({ usuario, onSalir }) {
                       )}
 
                       <div className="tf-actions">
+                        <button className="tf-etapa-btn" onClick={() => moverEtapa(f.maquina_id, -1)}
+                                title="Mover a la etapa anterior">◀</button>
+                        <button className="tf-etapa-btn" onClick={() => moverEtapa(f.maquina_id, 1)}
+                                title="Mover a la etapa siguiente">▶</button>
                         <button className="danger" onClick={() => quitar(f.maquina_id)} title="Quitar">✕</button>
                       </div>
                   </div>

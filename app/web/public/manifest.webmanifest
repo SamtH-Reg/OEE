@@ -3,7 +3,7 @@
   "short_name": "Paradas",
   "start_url": "/",
   "display": "fullscreen",
-  "orientation": "landscape",
+  "orientation": "portrait",
   "background_color": "#EDF1F5",
   "theme_color": "#FFFFFF",
   "icons": [

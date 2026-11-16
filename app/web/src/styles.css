@@ -1628,3 +1628,11 @@ header{padding-top:env(safe-area-inset-top, 0px)}
 /* eliminar dentro del archivo: sólo administrador */
 .btn-ghost.peligro{color:#A82C2C;border-color:#EFCBC7}
 .btn-ghost.peligro:hover{background:#FDEFEE}
+
+/* botones para mover la tarjeta de etapa (dedo, sin arrastrar) */
+.tf-actions{display:flex;gap:6px;align-items:center}
+.tf-etapa-btn{
+  width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:#fff;
+  color:var(--ink);font-size:13px;cursor:pointer;line-height:1
+}
+.tf-etapa-btn:hover{background:#F2F5F8}
