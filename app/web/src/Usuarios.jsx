@@ -234,7 +234,7 @@ export default function Usuarios() {
               Clave
             </button>
             <button className="btn-ghost" onClick={() => alternarActivo(u)}>
-              {u.activo ? 'Desactivar' : 'Activar'}
+              {u.activo ? 'Archivar' : 'Restaurar'}
             </button>
           </div>
         ))}

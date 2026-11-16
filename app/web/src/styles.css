@@ -1605,3 +1605,11 @@ header{padding-top:env(safe-area-inset-top, 0px)}
 
 /* archivar bloqueado: se ve apagado pero explica al tocarlo */
 .btn-ghost.bloqueado{opacity:.55;border-style:dashed}
+
+/* Archivar a la vista en la cabecera de la línea */
+.ln-archivar{
+  position:absolute;top:14px;right:66px;height:38px;padding:0 14px;border-radius:10px;
+  border:1px solid var(--line2);background:#fff;color:var(--ink);
+  font:600 13px inherit;cursor:pointer
+}
+.ln-archivar:hover{background:#F4F6F8}

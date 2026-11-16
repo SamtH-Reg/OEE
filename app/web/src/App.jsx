@@ -1907,6 +1907,12 @@ export default function App({ usuario, onSalir }) {
                   );
                 })()}
 
+                {puedeSupervisar && !turnoCerrado && (
+                  <button className="ln-archivar" onClick={archivarLinea}
+                          title="Cierra el proceso de esta línea y la saca del turno">
+                    Archivar
+                  </button>
+                )}
                 <button className={`ln-mas ${acciones ? 'on' : ''}`}
                         onClick={() => setAcciones(a => !a)}
                         title={acciones ? 'Ocultar opciones' : 'Opciones de la línea'}>
