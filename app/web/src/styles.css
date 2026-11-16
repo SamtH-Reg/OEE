@@ -1358,3 +1358,17 @@ header{
 .btn-detener-proceso:disabled,.btn-fin-turno:disabled,.ll-btn:disabled{
   opacity:.45;cursor:default;
 }
+
+/* ajustar horas del corte de proceso */
+.btn-ajustar-horas{
+  height:44px;padding:0 16px;border-radius:10px;border:1px solid var(--line2);background:#fff;
+  color:var(--ink);font:600 13.5px inherit;cursor:pointer;
+}
+.btn-ajustar-horas:hover{background:var(--panel2)}
+.confirma-atajos{display:flex;gap:8px;margin:6px 0 2px}
+.confirma-atajos .chip{
+  height:34px;padding:0 12px;border-radius:999px;border:1px solid var(--line2);background:#fff;
+  color:var(--muted);font:600 12px inherit;cursor:pointer;
+}
+.confirma-atajos .chip:hover{border-color:var(--accent);color:var(--accent)}
+.an-campo input[type="datetime-local"]{font:14px inherit}

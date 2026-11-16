@@ -1327,6 +1327,40 @@ app.post('/api/turnos/cerrar', async (req, reply) => {
   }
 });
 
+// Ajustar las horas del corte de proceso abierto (desde / hasta).
+// Al mover el inicio, el corte anterior termina en ese mismo instante para que la
+// línea de tiempo no quede con huecos ni solapes.
+app.patch('/api/turnos/corte', async (req, reply) => {
+  const b = req.body || {};
+  try {
+    const t = await q('select id from turnos where id = fn_turno_para(now())');
+    if (!t.rowCount) return reply.code(400).send({ error: 'no hay turno activo' });
+    const turnoId = t.rows[0].id;
+    const c = await q(`select * from turno_procesos
+                        where turno_id = $1 and hasta is null
+                        order by desde desc limit 1`, [turnoId]);
+    if (!c.rowCount) return reply.code(400).send({ error: 'no hay un corte de proceso abierto' });
+    const corte = c.rows[0];
+    const desde = b.desde ? new Date(b.desde) : new Date(corte.desde);
+    const hasta = b.hasta ? new Date(b.hasta) : null;
+    if (Number.isNaN(desde.getTime())) return reply.code(400).send({ error: 'hora de inicio inválida' });
+    if (hasta && Number.isNaN(hasta.getTime())) return reply.code(400).send({ error: 'hora de fin inválida' });
+    if (hasta && hasta <= desde) return reply.code(400).send({ error: 'la hora de fin tiene que ser posterior al inicio' });
+    if (hasta && hasta.getTime() > Date.now()) return reply.code(400).send({ error: 'la hora de fin no puede ser futura' });
+    if (desde.getTime() > Date.now()) return reply.code(400).send({ error: 'la hora de inicio no puede ser futura' });
+
+    await q(`update turno_procesos set hasta = $2
+              where id = (select id from turno_procesos
+                           where turno_id = $1 and id <> $3 and desde < $2
+                           order by desde desc limit 1)`, [turnoId, desde, corte.id]);
+    await q('update turno_procesos set desde = $2, hasta = $3 where id = $1',
+      [corte.id, desde, hasta]);
+    return { ok: true, id: corte.id, desde, hasta };
+  } catch (e) {
+    return reply.code(400).send({ error: e.message });
+  }
+});
+
 // Reabrir el turno (si se cerró por error): vuelve a aceptar registros y abre
 // un corte de proceso nuevo, para que el reloj no siga congelado en el cierre.
 app.post('/api/turnos/reabrir', async () => {

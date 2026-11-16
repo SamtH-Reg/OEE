@@ -66,6 +66,7 @@ export default function App() {
   const [conflictoEquipos, setConflictoEquipos] = useState([]);  // equipos repetidos del último guardado
   const [confirmarActivacion, setConfirmarActivacion] = useState(null);  // aviso al sacar líneas del turno
   const [confirmarCierre, setConfirmarCierre] = useState(false);         // aviso de fin de turno
+  const [ajustar, setAjustar] = useState(null);   // {desde, hasta} del corte (datetime-local)
   const [picker, setPicker] = useState(false);             // panel interactivo para agregar
   const [pickerBuscar, setPickerBuscar] = useState('');
   const flowRef = useRef(null);
@@ -441,7 +442,10 @@ export default function App() {
       return;
     }
     guardarTurnoCon([...lineasSel, lineaId]).then(ok => {
-      if (ok) setToast({ titulo: 'Línea activada', detalle: `${nombre} · se sumó al turno` });
+      if (ok) {
+        setToast({ titulo: 'Línea activada', detalle: `${nombre} · se sumó al turno` });
+        pedirHorasDelCorte();
+      }
     });
   }
 
@@ -457,6 +461,7 @@ export default function App() {
         titulo: 'Línea activada',
         detalle: `${conf.nombre} · salió ${conf.salen.map(s => s.nombre).join(' y ')}`
       });
+      pedirHorasDelCorte();
     }
   }
 
@@ -501,6 +506,51 @@ export default function App() {
     }
   }
 
+  // «Ajustar horas»: el corte de proceso no siempre empieza cuando se arma la
+  // línea — el operador la arma después de que ya venía trabajando.
+  const aInput = (iso) => {
+    const d = new Date(iso);
+    const p2 = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}T${p2(d.getHours())}:${p2(d.getMinutes())}`;
+  };
+  // Al sumar una línea al turno conviene revisar el rango: en planta la línea ya
+  // venía trabajando cuando el operador la arma.
+  async function pedirHorasDelCorte() {
+    try {
+      const m = await api.monitor();
+      setMonitor(m);
+      const cortes = m?.cortes || [];
+      const ref = cortes.find(c => !c.hasta) || cortes[0];
+      setAjustar({
+        desde: aInput(ref?.desde || new Date()),
+        hasta: ref?.hasta ? aInput(ref.hasta) : ''
+      });
+    } catch { /* sin red: no se ofrece */ }
+  }
+
+  function abrirAjusteHoras() {
+    const t = tiempoLinea(lineaActual);
+    setAjustar({
+      desde: aInput(t?.desde || new Date()),
+      hasta: t?.hasta ? aInput(t.hasta) : ''
+    });
+  }
+  async function guardarAjusteHoras() {
+    if (!ajustar) return;
+    try {
+      await api.ajustarCorte({
+        desde: new Date(ajustar.desde).toISOString(),
+        hasta: ajustar.hasta ? new Date(ajustar.hasta).toISOString() : null
+      });
+      setAjustar(null);
+      api.monitor().then(setMonitor).catch(() => {});
+      await refrescar();
+      setToast({ titulo: 'Horas del corte actualizadas', detalle: 'El informe y el análisis usan este rango' });
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
   // Reabrir el turno si se cerró por error
   async function reabrirTurno() {
     try {
@@ -536,7 +586,8 @@ export default function App() {
       if (b > a) paradaMs += b - a;
     }
     const parada = Math.min(total, Math.round(paradaMs / 60000));
-    return { total, parada, trabajo: Math.max(0, total - parada), cerrado: Boolean(ref?.hasta) };
+    return { total, parada, trabajo: Math.max(0, total - parada),
+             cerrado: Boolean(ref?.hasta), desde: ref?.desde, hasta: ref?.hasta };
   }
 
   // Detener el proceso completo: la parada va sobre el cuello de la línea (o su
@@ -1689,7 +1740,11 @@ export default function App() {
                   return (
                     <span className="ln-tiempos">
                       <b>{fmtMin(t.trabajo)} de trabajo</b>
-                      <em>{fmtMin(t.total)} desde el corte · {fmtMin(t.parada)} en parada{t.cerrado ? ' · proceso cerrado' : ''}</em>
+                      <em>
+                        {hhmm(t.desde)} – {t.hasta ? hhmm(t.hasta) : 'en curso'} ·
+                        {' '}{fmtMin(t.total)} desde el corte · {fmtMin(t.parada)} en parada
+                        {t.cerrado ? ' · proceso cerrado' : ''}
+                      </em>
                     </span>
                   );
                 })()}
@@ -1700,6 +1755,8 @@ export default function App() {
                           title="Registra una parada sobre el cuello de la línea: se detiene todo el proceso">
                     ■ Detener el proceso
                   </button>
+                  <button className="btn-ajustar-horas" onClick={abrirAjusteHoras}
+                          title="Corregir desde/hasta del corte de proceso">Ajustar horas</button>
                   <button className="btn-fin-turno" onClick={() => setConfirmarCierre(true)}
                           disabled={turnoCerrado}
                           title="Fine de turno: detiene las líneas armadas con la causa «Fin de turno» y cierra el proceso">
@@ -1918,6 +1975,36 @@ export default function App() {
               reanudar(sheet.maquina, sheet.parada, txt);
             }}>▶ Reanudar operación</button>
             <textarea id="comment" className="comment" placeholder="Comentario (opcional)" />
+          </div>
+        </div>
+      )}
+
+      {/* Ajustar las horas del corte de proceso */}
+      {ajustar && (
+        <div className="confirma-capa" onClick={() => setAjustar(null)}>
+          <div className="confirma" onClick={e => e.stopPropagation()}>
+            <h3>Horas del corte</h3>
+            <p>Corregí desde cuándo trabaja la línea con este armado. Si dejás el fin vacío, sigue en curso.</p>
+            <label className="an-campo">Desde
+              <input type="datetime-local" value={ajustar.desde}
+                     onChange={e => setAjustar({ ...ajustar, desde: e.target.value })} />
+            </label>
+            <label className="an-campo">Hasta
+              <input type="datetime-local" value={ajustar.hasta}
+                     onChange={e => setAjustar({ ...ajustar, hasta: e.target.value })} />
+            </label>
+            <div className="confirma-atajos">
+              <button className="chip" onClick={() => setAjustar({ ...ajustar, desde: aInput(new Date()) })}>
+                inicio = ahora
+              </button>
+              <button className="chip" onClick={() => setAjustar({ ...ajustar, hasta: '' })}>
+                dejar en curso
+              </button>
+            </div>
+            <div className="confirma-acciones">
+              <button className="ghost" onClick={() => setAjustar(null)}>Cancelar</button>
+              <button className="btn-go small" onClick={guardarAjusteHoras}>Guardar horas</button>
+            </div>
           </div>
         </div>
       )}
