@@ -1549,3 +1549,29 @@ header{padding-top:env(safe-area-inset-top, 0px)}
 .lineas-op.fija{background:var(--ok-bg)}
 .lineas-op.fija .line-check{border-color:#12A35E;background:#12A35E}
 .lineas-op.fija .lineas-toggle{cursor:default}
+
+/* ---- cabecera de línea: acciones escondidas detrás de un ＋ ---- */
+.line-head{position:relative}
+.ln-mas{
+  position:absolute;top:12px;right:14px;width:42px;height:42px;border-radius:50%;
+  border:1px solid var(--line2);background:#fff;color:var(--ink);
+  font:600 20px/1 inherit;cursor:pointer;display:grid;place-items:center
+}
+.ln-mas.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.ln-acciones.pop{
+  position:absolute;top:62px;right:14px;z-index:30;margin-top:0;
+  flex-direction:column;flex-wrap:nowrap;gap:8px;min-width:228px;width:auto;
+  padding:10px;border-radius:16px;border:1px solid var(--border);
+  background:var(--panel);box-shadow:0 22px 44px -22px rgba(15,27,39,.45)
+}
+.ln-acciones.pop > *{width:100%;justify-content:flex-start}
+
+/* ---- zoom con los dedos (no lo hace el navegador) ---- */
+.flow.split,.tf-body{touch-action:pan-x pan-y}
+
+/* volver al 100 % después de hacer zoom con los dedos */
+.zoom-reset{
+  position:sticky;left:0;margin:0 0 8px;height:34px;padding:0 12px;border-radius:999px;
+  border:1px solid var(--line2);background:#fff;color:var(--ink);
+  font:600 12.5px inherit;cursor:pointer;z-index:5
+}

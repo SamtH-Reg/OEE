@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   db, guardarCatalogo, leerCatalogo, guardarTablero, leerTablero,
   encolar, deshacer
@@ -10,6 +10,99 @@ import LineaRapida from './LineaRapida';
 import Analisis from './Analisis';
 
 const nf = new Intl.NumberFormat('es-CL');
+
+// Zoom con dos dedos (tablet) sobre un contenedor: pellizcar acerca/aleja y el
+// doble toque vuelve al 100 %. El desplazamiento queda a cargo del scroll nativo.
+function usePinch(setScale, { min = 0.4, max = 2.4, getScale } = {}) {
+  const fijar = useRef(setScale);
+  fijar.current = setScale;
+  const op = useRef({ min, max, getScale });
+  op.current = { min, max, getScale };
+  const soltar = useRef(null);
+
+  // Se usa como ref de callback: el contenedor aparece y desaparece con la vista,
+  // así que los listeners se enganchan cuando el nodo existe (no en el montaje).
+  return useCallback(nodo => {
+    if (soltar.current) { soltar.current(); soltar.current = null; }
+    if (!nodo) return;
+    let dPrev = 0, activo = false, ultimoTap = 0, x0 = 0, y0 = 0, medio = { x: 0, y: 0 };
+    const dist = (a, b) => Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+    const acotar = z => Math.min(op.current.max, Math.max(op.current.min, +z.toFixed(3)));
+    const escala = () => (op.current.getScale ? op.current.getScale() : 1);
+    // el ancestro que scrollea: ahí se compensa para que el punto de los dedos no se escape
+    const scroller = () => {
+      let e = nodo;   // el propio contenedor puede ser el que scrollea
+      while (e) {
+        const cs = getComputedStyle(e);
+        const puedeX = /(auto|scroll)/.test(cs.overflowX) && e.scrollWidth > e.clientWidth + 1;
+        const puedeY = /(auto|scroll)/.test(cs.overflowY) && e.scrollHeight > e.clientHeight + 1;
+        if (puedeX || puedeY) return e;
+        e = e.parentElement;
+      }
+      return null;
+    };
+    const onStart = e => {
+      if (e.touches.length === 2) {
+        activo = true;
+        dPrev = dist(e.touches[0], e.touches[1]);
+        medio = { x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+                  y: (e.touches[0].clientY + e.touches[1].clientY) / 2 };
+      } else if (e.touches.length === 1) {
+        x0 = e.touches[0].clientX; y0 = e.touches[0].clientY;
+      }
+    };
+    const onMove = e => {
+      if (!activo || e.touches.length !== 2) return;
+      const d = dist(e.touches[0], e.touches[1]);
+      const k = d / (dPrev || d || 1);
+      dPrev = d;
+      if (e.cancelable) e.preventDefault();
+      const prev = escala();
+      const next = acotar(prev * k);
+      const cont = scroller();
+      if (!cont || prev === next) { fijar.current(next); return; }
+      const r = cont.getBoundingClientRect();
+      const px = medio.x - r.left, py = medio.y - r.top;
+      const cx = (cont.scrollLeft + px) / prev, cy = (cont.scrollTop + py) / prev;
+      fijar.current(next);
+      // esperar a que el navegador recalcule el tamaño con el nuevo zoom y,
+      // si el scroll todavía no llegó (el ancho aún no creció), reintentar
+      const aplicar = (intento = 0) => {
+        const maxL = Math.max(0, cont.scrollWidth - cont.clientWidth);
+        const maxT = Math.max(0, cont.scrollHeight - cont.clientHeight);
+        const oL = Math.min(maxL, Math.max(0, cx * next - px));
+        const oT = Math.min(maxT, Math.max(0, cy * next - py));
+        cont.scrollLeft = oL;
+        cont.scrollTop = oT;
+        if (intento < 2 && (Math.abs(cont.scrollLeft - oL) > 2 || Math.abs(cont.scrollTop - oT) > 2)) {
+          setTimeout(() => aplicar(intento + 1), 45);
+        }
+      };
+      requestAnimationFrame(() => requestAnimationFrame(() => aplicar()));
+    };
+    const onEnd = e => {
+      if (e.touches.length < 2) activo = false;
+      if (e.touches.length === 0 && e.changedTouches.length === 1) {
+        const t = e.changedTouches[0];
+        if (Math.hypot(t.clientX - x0, t.clientY - y0) < 12) {
+          const ahora = Date.now();
+          if (ahora - ultimoTap < 340) { fijar.current(1); ultimoTap = 0; }
+          else ultimoTap = ahora;
+        }
+      }
+    };
+    nodo.addEventListener('touchstart', onStart, { passive: true });
+    nodo.addEventListener('touchmove', onMove, { passive: false });
+    nodo.addEventListener('touchend', onEnd);
+    nodo.addEventListener('touchcancel', onEnd);
+    soltar.current = () => {
+      nodo.removeEventListener('touchstart', onStart);
+      nodo.removeEventListener('touchmove', onMove);
+      nodo.removeEventListener('touchend', onEnd);
+      nodo.removeEventListener('touchcancel', onEnd);
+    };
+  }, []);
+}
 
 // un color por bloque de origen, para seguir las conexiones de un vistazo
 const PALETA = ['#2F80ED', '#27AE60', '#E58E26', '#9B51E0', '#EB5757',
@@ -82,6 +175,8 @@ export default function App({ usuario, onSalir }) {
   const [avisoEditor, setAvisoEditor] = useState(null);
   const [modoConexion, setModoConexion] = useState(null);   // origen esperando destino
   const [zoom, setZoom] = useState(1);
+  const [zoomFlujo, setZoomFlujo] = useState(1);   // zoom del tablero de la línea
+  const [acciones, setAcciones] = useState(false); // menú ＋ de la cabecera de línea
   const [arrastre, setArrastre] = useState(null);   // maquina_id que se está moviendo
   const [sobre, setSobre] = useState(null);         // destino bajo el cursor
   const [toast, setToast] = useState(null);
@@ -90,6 +185,11 @@ export default function App({ usuario, onSalir }) {
   const [sinRed, setSinRed] = useState(false);
   const [ahora, setAhora] = useState(Date.now());
   const [error, setError] = useState(null);
+
+  const zFlujoRef = useRef(1);  zFlujoRef.current = zoomFlujo;
+  const zEditorRef = useRef(1); zEditorRef.current = zoom;
+  const pinchFlujo = usePinch(setZoomFlujo, { min: 0.6, max: 2.4, getScale: () => zFlujoRef.current });
+  const pinchEditor = usePinch(setZoom, { min: 0.4, max: 2.4, getScale: () => zEditorRef.current });
 
   // ---- arranque: caché local primero, red después ----
   useEffect(() => {
@@ -1738,30 +1838,44 @@ export default function App({ usuario, onSalir }) {
                   );
                 })()}
 
-                <div className="ln-acciones">
-                  <button className="btn-detener-proceso" onClick={detenerProceso}
+                <button className={`ln-mas ${acciones ? 'on' : ''}`}
+                        onClick={() => setAcciones(a => !a)}
+                        title={acciones ? 'Ocultar opciones' : 'Opciones de la línea'}>
+                  {acciones ? '×' : '＋'}
+                </button>
+                {acciones && (
+                <div className="ln-acciones pop">
+                  <button className="btn-detener-proceso" onClick={() => { setAcciones(false); detenerProceso(); }}
                           disabled={turnoCerrado}
                           title="Registra una parada sobre el cuello de la línea: se detiene todo el proceso">
                     ■ Detener el proceso
                   </button>
                   {puedeSupervisar && (
-                  <button className="btn-ajustar-horas" onClick={abrirAjusteHoras}
+                  <button className="btn-ajustar-horas" onClick={() => { setAcciones(false); abrirAjusteHoras(); }}
                           title="Corregir desde/hasta del corte de proceso">Ajustar horas</button>
                   )}
                   {puedeSupervisar && (
-                  <button className="btn-archivar" onClick={archivarLinea}
+                  <button className="btn-archivar" onClick={() => { setAcciones(false); archivarLinea(); }}
                           title="Cierra el proceso de esta línea y la saca del turno">
                     Archivar
                   </button>
                   )}
                   {procesoId && (
-                    <button className="volver-planta" onClick={() => setSel('p:' + procesoId)}>
+                    <button className="volver-planta" onClick={() => { setAcciones(false); setSel('p:' + procesoId); }}>
                       ← Tablero en vivo
                     </button>
                   )}
                 </div>
+                )}
               </div>
-              <div className="flow split">
+              {zoomFlujo !== 1 && (
+                <button className="zoom-reset" onClick={() => setZoomFlujo(1)}
+                        title="Volver al tamaño normal">
+                  {Math.round(zoomFlujo * 100)}% · volver al 100%
+                </button>
+              )}
+              <div className="flow split" ref={pinchFlujo}
+                   style={{ zoom: zoomFlujo }}>
                 {columnasLinea.map((col, ci) => (
                   <div className={`flow-col ${col.filas.length > 1 ? 'multi' : ''}`} key={col.pos}>
                     <span className="flow-etapa">Etapa {col.pos}</span>
@@ -2064,7 +2178,7 @@ export default function App({ usuario, onSalir }) {
             <button className="x" onClick={() => setEditor(null)}>✕</button>
           </div>
 
-          <div className="tf-body">
+          <div className="tf-body" ref={pinchEditor}>
             {modoConexion && (
               <div className="tf-avisos modo">
                 <b>Conectando desde {nombreCorto(modoConexion)}</b>
