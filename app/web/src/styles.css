@@ -35,7 +35,7 @@ body{
   overflow:hidden;
   -webkit-font-smoothing:antialiased;
 }
-.app{height:100%;display:flex;flex-direction:column}
+.app{height:100%;height:100dvh;display:flex;flex-direction:column}
 
 /* ---------------- header ---------------- */
 header{
@@ -1372,3 +1372,95 @@ header{
 }
 .confirma-atajos .chip:hover{border-color:var(--accent);color:var(--accent)}
 .an-campo input[type="datetime-local"]{font:14px inherit}
+
+/* ================= tablet / táctil (base) ================= */
+html{
+  -webkit-text-size-adjust:100%;   /* sin inflar la letra al girar a horizontal */
+  overscroll-behavior:none;        /* sin pull-to-refresh que corta el tablero */
+  color-scheme:light;
+}
+body{overscroll-behavior:none}
+.side,.stage,.analisis,.tf-body,.lr-lista,.lineas-lista{overscroll-behavior:contain}
+
+/* 16px en campos: si no, iOS hace zoom al enfocar y no vuelve */
+input,select,textarea{font-size:16px}
+
+/* controles: sin selección de texto, sin menú al mantener apretado, sin demora de 300 ms */
+button,a,[role=button],.tile,.line-item,.chip,.lineas-toggle,.tabs button{
+  touch-action:manipulation;
+  -webkit-user-select:none;user-select:none;
+  -webkit-touch-callout:none;
+}
+/* realimentación al apretar (no al soltar) */
+button:active,.tile:active,.line-item:active{transform:scale(.985)}
+
+/* notch / home indicator */
+header{padding-top:env(safe-area-inset-top, 0px)}
+.side{padding-left:calc(14px + env(safe-area-inset-left, 0px))}
+.analisis{padding-bottom:calc(40px + env(safe-area-inset-bottom, 0px))}
+
+/* ================= tablet horizontal 1024–1280 ================= */
+@media (max-width:1180px){
+  header{height:74px;padding:0 16px;gap:12px}
+  .side{width:312px;padding:14px 12px}
+  .tile{min-height:112px;padding:12px 14px}
+  .tile .name{font-size:16px}
+  .analisis{padding:16px 16px 32px}
+  .an-grid{grid-template-columns:1fr}
+  .an-kpis{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .tf-canvas .tf-card{width:224px}
+}
+/* ================= tablet vertical / pantalla angosta ================= */
+@media (max-width:900px){
+  header{height:66px;gap:10px}
+  .hint{display:none}
+  .brand b{font-size:16px}
+  .brand span{font-size:11px}
+  .side{width:286px}
+  .line-head b{font-size:17px}
+  .ln-acciones{width:100%}
+  .proc-flow,.trama-flow{overscroll-behavior-x:contain}
+}
+
+/* ================= dedos: ningún control por debajo de ~48 px ================= */
+@media (pointer:coarse){
+  .btn-guardar-proc,.btn-edit,.lineas-sel,.armado-buscar,.proceso-nombre{min-height:50px}
+  .btn-guardar-proc.ancho{height:54px}
+  .btn-detener-proceso,.btn-ajustar-horas,.volver-planta,.ll-btn{height:50px;min-height:50px}
+  .lineas-op{min-height:56px}
+  .lineas-toggle{min-height:52px}
+  .lineas-abrir{width:50px;height:50px}
+  .an-rapidos .chip,.confirma-atajos .chip{height:44px}
+  .an-btn{height:40px}
+  .lr-item{min-height:58px}
+  .tabs button{min-height:52px}
+}
+
+/* ================= tablet vertical: el panel es una barra arriba ================= */
+@media (max-width:980px){
+  .layout{flex-direction:column}
+  .side{
+    width:100%;flex-direction:row;align-items:center;gap:12px;
+    overflow-x:auto;overflow-y:hidden;border-right:0;border-bottom:1px solid var(--line);
+    padding:10px 12px;min-height:96px;
+  }
+  .side-h,.side-foot{display:none}
+  .proceso-box{
+    flex-direction:row;align-items:center;gap:10px;margin-bottom:0;
+    min-width:0;flex:0 0 auto;
+  }
+  .lineas-sel{width:238px;min-height:56px}
+  .lineas-lista{
+    position:fixed;left:12px;right:12px;top:auto;bottom:12px;z-index:70;
+    max-height:60vh;box-shadow:0 24px 60px -22px rgba(15,27,39,.55);
+  }
+  .btn-linea-nueva{white-space:nowrap;height:52px}
+  .btn-guardar-proc.ancho{width:auto;min-width:160px;height:52px}
+  .lineas-op{min-height:56px}
+  .line-item.compacto{min-width:250px;min-height:78px}
+  .linea-lista{min-width:260px}
+  .btn-edit{min-width:190px;height:52px}
+  .stage{padding:14px 16px}
+  .ln-acciones{width:100%}
+  .analisis{padding:14px 14px 26px}
+}
