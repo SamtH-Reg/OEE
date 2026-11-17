@@ -984,6 +984,11 @@ app.delete('/api/lineas/:id', async (req, reply) => {
   const client = await pool.connect();
   try {
     await client.query('begin');
+    // la información de esa línea se va con ella: sus paradas dejan de contar
+    await client.query(`update registro_paradas set estado = 'anulada',
+                               motivo_anulacion = coalesce(motivo_anulacion, 'línea eliminada')
+                         where linea_id = $1 and estado <> 'anulada'`, [id]);
+    await client.query('delete from lineas_archivadas where linea_id = $1', [id]);
     await client.query('delete from linea_conexiones where linea_id = $1', [id]);
     await client.query('delete from linea_maquinas where linea_id = $1', [id]);
     const r = await client.query('delete from lineas where id = $1 returning id', [id]);
