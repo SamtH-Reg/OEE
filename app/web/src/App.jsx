@@ -106,7 +106,7 @@ function usePinch(setScale, { min = 0.4, max = 2.4, getScale } = {}) {
 
 // Deslizar hacia abajo desde el tope para recargar la app: en la tablet instalada
 // no hay botón de refresh del navegador, y así se trae la última versión desplegada.
-function usePullRefresh(umbral = 70) {
+function usePullRefresh(umbral = 90, alSoltar) {
   const [tirando, setTirando] = useState(0);
   const [listo, setListo] = useState(false);
   const d = useRef(0);
@@ -139,8 +139,10 @@ function usePullRefresh(umbral = 70) {
       setListo(v >= umbral);
     };
     const onEnd = () => {
-      if (activo && d.current >= umbral) { setTirando(60); location.reload(); return; }
+      const dispara = activo && d.current >= umbral;
       activo = false; y0 = null; d.current = 0; setTirando(0); setListo(false);
+      // no recarga sola: pide confirmación (se perdió un armado por un roce)
+      if (dispara && alSoltar) alSoltar();
     };
     window.addEventListener('touchstart', onStart, { passive: true });
     window.addEventListener('touchmove', onMove, { passive: false });
@@ -210,7 +212,8 @@ export default function App({ usuario, onSalir }) {
 
   const [ajustes, setAjustes] = useState(false);        // true | 'archivados'
   const [confirmarArchivo, setConfirmarArchivo] = useState(null);  // {id, nombre}
-  const { tirando, listo } = usePullRefresh(70);
+  const [confirmarRecarga, setConfirmarRecarga] = useState(false);
+  const { tirando, listo } = usePullRefresh(90, () => setConfirmarRecarga(true));
   const [analisis, setAnalisis] = useState(false);
   const [sheet, setSheet] = useState(null);
   const [editor, setEditor] = useState(null);
@@ -242,6 +245,17 @@ export default function App({ usuario, onSalir }) {
 
   const zFlujoRef = useRef(1);  zFlujoRef.current = zoomFlujo;
   const zEditorRef = useRef(1); zEditorRef.current = zoom;
+  // Borrador de la trama en el navegador: si la tablet recarga a mitad de la edición,
+  // al volver a entrar al editor se recupera lo que estaba armado.
+  useEffect(() => {
+    const lid = editor?.linea?.linea_id;
+    if (!lid || editor.guardando) return;
+    try {
+      localStorage.setItem('borrador-trama-' + lid,
+        JSON.stringify({ filas: editor.filas, conexiones: editor.conexiones || [] }));
+    } catch { /* sin espacio: da igual */ }
+  }, [editor?.filas, editor?.conexiones, editor?.linea?.linea_id, editor?.guardando]);
+
   const pinchFlujo = usePinch(setZoomFlujo, { min: 0.6, max: 2.4, getScale: () => zFlujoRef.current });
   const pinchEditor = usePinch(setZoom, { min: 0.4, max: 2.4, getScale: () => zEditorRef.current });
 
@@ -1154,11 +1168,23 @@ export default function App({ usuario, onSalir }) {
     const cons = (conexiones || [])
       .filter(c => c.linea_id === lineaId)
       .map(c => ({ desde_maquina_id: c.desde_maquina_id, hasta_maquina_id: c.hasta_maquina_id }));
+    // si quedó un borrador (se recargó la tablet a mitad de la edición), se recupera
+    let borrador = null;
+    try {
+      const crudo = localStorage.getItem('borrador-trama-' + lineaId);
+      if (crudo) borrador = JSON.parse(crudo);
+    } catch { /* sin borrador */ }
+    const usar = borrador && Array.isArray(borrador.filas) && borrador.filas.length;
+
     setSeleccionada(null);
     setPicker(false);
     setPickerBuscar('');
-    setEditor({ linea: { ...linea, linea_id: lineaId }, filas, conexiones: cons,
-                nueva: '', error: null, guardando: false });
+    setEditor({
+      linea: { ...linea, linea_id: lineaId },
+      filas: usar ? borrador.filas : filas,
+      conexiones: usar ? (borrador.conexiones || cons) : cons,
+      nueva: '', error: null, guardando: false, borrador: Boolean(usar)
+    });
   }
 
   function editar(fn) {
@@ -1171,14 +1197,21 @@ export default function App({ usuario, onSalir }) {
   // arrastrar la tarjeta libremente por el lienzo
   function iniciarMover(e, f) {
     if (e.button !== 0) return;
-    // en la tablet el dedo no arrastra: tocar la tarjeta la selecciona y muestra
-    // las sugerencias (arrastrar se sentía como que "todo se movía")
-    if (e.pointerType && e.pointerType !== 'mouse') return;
     if (e.target.closest && e.target.closest('.tf-port, button, input, select, label')) return;
-    e.preventDefault();
+    const dedo = e.pointerType && e.pointerType !== 'mouse';
+    // Con el dedo, la tarjeta se mueve recién cuando el dedo recorre unos píxeles:
+    // así un toque sigue siendo toque (seleccionar / conectar) y el arrastre funciona.
+    let arrastrando = !dedo;
+    if (arrastrando) { e.preventDefault(); setMoviendo(f.maquina_id); }
     const x0 = e.clientX, y0 = e.clientY, ox = f.x, oy = f.y;
-    setMoviendo(f.maquina_id);
     const mover = (ev) => {
+      const bruto = Math.hypot(ev.clientX - x0, ev.clientY - y0);
+      if (!arrastrando) {
+        if (bruto < 12) return;               // todavía puede ser un toque
+        arrastrando = true;
+        setMoviendo(f.maquina_id);
+      }
+      if (ev.cancelable) ev.preventDefault();
       const dx = (ev.clientX - x0) / zoom, dy = (ev.clientY - y0) / zoom;
       setEditor(prev => ({
         ...prev,
@@ -1515,6 +1548,12 @@ export default function App({ usuario, onSalir }) {
     });
   }
 
+  function cerrarEditor() {
+    const lid = editor?.linea?.linea_id;
+    if (lid) { try { localStorage.removeItem('borrador-trama-' + lid); } catch { /* nada */ } }
+    setEditor(null);
+  }
+
   async function guardarTrama() {
     setEditor(prev => ({ ...prev, guardando: true, error: null }));
     try {
@@ -1534,6 +1573,7 @@ export default function App({ usuario, onSalir }) {
       setTrama(lin.trama);
       setConexiones(lin.conexiones || []);
       await guardarTablero({ maquinas: tab.maquinas, lineas: lin.lineas, trama: lin.trama });
+      try { localStorage.removeItem('borrador-trama-' + editor.linea.linea_id); } catch { /* nada */ }
       setEditor(null);
       setToast({ titulo: 'Trama guardada', detalle: `${editor.linea.nombre} · ${editor.filas.length} máquinas` });
     } catch (e) {
@@ -2259,10 +2299,16 @@ export default function App({ usuario, onSalir }) {
                 Solo un cuello de botella, y ese detiene la línea completa.
               </div>
             </div>
-            <button className="x" onClick={() => setEditor(null)}>✕</button>
+            <button className="x" onClick={cerrarEditor}>✕</button>
           </div>
 
           <div className="tf-body" ref={pinchEditor}>
+            {editor.borrador && !modoConexion && (
+              <div className="tf-avisos borrador">
+                <b>Se recuperó lo que estabas editando</b>
+                <span>Revisalo y tocá «Guardar trama», o «Cancelar» para descartarlo.</span>
+              </div>
+            )}
             {modoConexion && (
               <div className="tf-avisos modo">
                 <b>Conectando desde {nombreCorto(modoConexion)}</b>
@@ -2322,6 +2368,7 @@ export default function App({ usuario, onSalir }) {
               {editor.filas.map(f => {
                 const salientes = conexionesSalidaDe(f.maquina_id).length > 0;
                 const entrantes = entradasDe(f.maquina_id).length > 0;
+                const sel = seleccionada === f.maquina_id;
                 return (
                   <div key={f.maquina_id} id={'tr-' + f.maquina_id}
                        className={`tf-card ${f.detiene_linea ? 'is-cuello' : ''}
@@ -2386,6 +2433,7 @@ export default function App({ usuario, onSalir }) {
                             </span>
                           ))}
                         </div>
+                        {sel && (
                         <select value=""
                                 onChange={e => {
                                   if (e.target.value) intentarConectar(f.maquina_id, Number(e.target.value));
@@ -2396,20 +2444,24 @@ export default function App({ usuario, onSalir }) {
                             .filter(x => x.maquina_id !== f.maquina_id)
                             .map(x => <option key={x.maquina_id} value={x.maquina_id}>{x.nombre_corto}</option>)}
                         </select>
+                        )}
                       </div>
 
-                      <label className="tf-cuello">
+                      {!sel && (
+                        <span className="tf-toca">tocá para conectar o cambiar</span>
+                      )}
+                      {sel && (<label className="tf-cuello">
                         <input type="radio" name="cuello" checked={f.detiene_linea}
                                onChange={() => marcarCuello(f.maquina_id)} />
                         cuello de línea
-                      </label>
-                      <label className="tf-cuello tf-fin">
+                      </label>)}
+                      {sel && (<label className="tf-cuello tf-fin">
                         <input type="checkbox" checked={f.fin_linea}
                                onChange={() => alternarFin(f.maquina_id)} />
                         fin de línea
-                      </label>
+                      </label>)}
 
-                      <label className="tf-mover">
+                      {sel && (<label className="tf-mover">
                         <span>Pasar a otra línea</span>
                         <select value=""
                                 onChange={e => {
@@ -2421,7 +2473,7 @@ export default function App({ usuario, onSalir }) {
                             .filter(l => l.linea_id !== editor.linea.linea_id)
                             .map(l => <option key={l.linea_id} value={l.linea_id}>{l.nombre}</option>)}
                         </select>
-                      </label>
+                      </label>)}
 
                       {/* sugerencias para enlazar sin buscar en los desplegables */}
                       {seleccionada === f.maquina_id &&
@@ -2447,13 +2499,13 @@ export default function App({ usuario, onSalir }) {
                         </div>
                       )}
 
-                      <div className="tf-actions">
+                      {sel && (<div className="tf-actions">
                         <button className="tf-etapa-btn" onClick={() => moverEtapa(f.maquina_id, -1)}
                                 title="Mover a la etapa anterior">◀</button>
                         <button className="tf-etapa-btn" onClick={() => moverEtapa(f.maquina_id, 1)}
                                 title="Mover a la etapa siguiente">▶</button>
                         <button className="danger" onClick={() => quitar(f.maquina_id)} title="Quitar">✕</button>
-                      </div>
+                      </div>)}
                   </div>
                 );
               })}
@@ -2515,7 +2567,7 @@ export default function App({ usuario, onSalir }) {
               <span>{Math.round(zoom * 100)}%</span>
               <button onClick={() => setZoom(z => Math.min(1.6, +(z + 0.1).toFixed(2)))} title="Acercar">＋</button>
             </div>
-            <button className="ghost" onClick={() => setEditor(null)}>Cancelar</button>
+            <button className="ghost" onClick={cerrarEditor}>Cancelar</button>
             <button className="btn-go small" onClick={guardarTrama} disabled={editor.guardando}>
               {editor.guardando ? 'Guardando…' : 'Guardar trama'}
             </button>
@@ -2537,6 +2589,19 @@ export default function App({ usuario, onSalir }) {
             refrescar().then(() => abrirEditor(linea));
           }}
         />
+      )}
+
+      {confirmarRecarga && (
+        <div className="confirma-capa" onClick={() => setConfirmarRecarga(false)}>
+          <div className="confirma" onClick={e => e.stopPropagation()}>
+            <h3>Actualizar la app</h3>
+            <p>Se recarga la tablet con la última versión. Lo que estabas editando se recupera al volver.</p>
+            <div className="confirma-acciones">
+              <button className="ghost" onClick={() => setConfirmarRecarga(false)}>Cancelar</button>
+              <button className="btn-go small" onClick={() => location.reload()}>Actualizar</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {confirmarArchivo && (

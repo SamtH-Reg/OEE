@@ -1636,3 +1636,31 @@ header{padding-top:env(safe-area-inset-top, 0px)}
   color:var(--ink);font-size:13px;cursor:pointer;line-height:1
 }
 .tf-etapa-btn:hover{background:#F2F5F8}
+
+/* ---- editor de trama pensado para el dedo ---- */
+.tf-canvas .tf-card{touch-action:none}          /* la tarjeta se arrastra, no hace scroll */
+@media (pointer:coarse){
+  .tf-canvas .tf-card{width:286px}
+  .tf-card{min-height:132px}
+  .tf-port{width:34px;height:34px;top:44%}
+  .tf-port.in{left:-17px}
+  .tf-port.out{right:-17px}
+  .tf-port.out.izq{left:-17px;right:auto}
+  .tf-actions{gap:10px;margin-top:10px}
+  .tf-actions button{min-width:46px;min-height:46px;font-size:16px}
+  .tf-etapa-btn{width:46px;height:46px}
+  .tf-sug-chip{min-height:46px;font-size:14px;padding:0 14px}
+  .tf-cuello{min-height:44px;font-size:14px}
+  .tf-mover select{height:46px;font-size:14px}
+  .tf-head{padding:10px 12px}
+  .tf-name, .tf-nombre{font-size:15px}
+}
+.tf-avisos.borrador{background:#FFF7E8;border-color:#F0D9A8;color:#8A5A12}
+.tf-avisos.borrador b{color:#7A4E0C}
+
+/* tarjeta compacta: los controles aparecen al tocarla */
+.tf-toca{
+  display:block;margin-top:8px;font:600 11.5px inherit;color:var(--dim);
+  letter-spacing:.2px
+}
+.tf-card.sel .tf-toca{display:none}
