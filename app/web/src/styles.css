@@ -1664,3 +1664,29 @@ header{padding-top:env(safe-area-inset-top, 0px)}
   letter-spacing:.2px
 }
 .tf-card.sel .tf-toca{display:none}
+
+/* ---- línea de tiempo de fallas (tablero de la línea) ---- */
+.lp{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:14px}
+.lp-head{display:flex;align-items:center;gap:10px}
+.lp-head b{font-size:14.5px}
+.lp-dato{font-size:12.5px;color:var(--muted)}
+.lp-ref{margin-left:auto;width:34px;height:34px;border-radius:9px;border:1px solid var(--line2);background:#fff;cursor:pointer;color:var(--ink)}
+.lp-bar{position:relative;height:26px;margin:10px 0 8px;border-radius:8px;background:#EEF2F6;overflow:hidden}
+.lp-seg{position:absolute;top:0;bottom:0;border:0;padding:0;cursor:pointer;opacity:.9;border-radius:4px}
+.lp-seg:hover{opacity:1;outline:2px solid #25354433}
+.lp-vacio{margin:8px 0;font-size:13px;color:var(--muted)}
+.lp-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px;max-height:208px;overflow:auto}
+.lp-list li{display:flex;align-items:center;gap:10px;padding:5px 2px;border-top:1px solid #EDF1F5;font-size:13px}
+.lp-hora{flex:0 0 128px;color:var(--muted);font-variant-numeric:tabular-nums}
+.lp-maq{flex:0 0 150px;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lp-causa{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lp-dur{flex:0 0 70px;text-align:right;color:var(--muted)}
+.lp-btn{width:34px;height:34px;border-radius:9px;border:1px solid var(--line2);background:#fff;cursor:pointer;color:var(--ink)}
+.lp-btn.peligro{color:#A82C2C;border-color:#EFCBC7}
+@media (pointer:coarse){
+  .lp-seg{min-width:8px}
+  .lp-btn{width:44px;height:44px;font-size:17px}
+  .lp-list li{padding:8px 2px;font-size:14px}
+  .lp-hora{flex:0 0 120px}
+  .lp-maq{flex:0 0 130px}
+}

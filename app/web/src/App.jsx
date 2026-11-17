@@ -8,6 +8,7 @@ import { arrancarSync } from './sync';
 import Settings from './Settings';
 import LineaRapida from './LineaRapida';
 import Analisis from './Analisis';
+import LineaParadas from './LineaParadas';
 
 const nf = new Intl.NumberFormat('es-CL');
 
@@ -1998,6 +1999,8 @@ export default function App({ usuario, onSalir }) {
                   {Math.round(zoomFlujo * 100)}% · volver al 100%
                 </button>
               )}
+              <LineaParadas lineaId={lineaActual.linea_id} causas={cat?.causas || []}
+                            onCambio={() => { refrescar(); api.monitor().then(setMonitor).catch(() => {}); }} />
               <div className="flow split" ref={pinchFlujo}
                    style={{ zoom: zoomFlujo }}>
                 {columnasLinea.map((col, ci) => (

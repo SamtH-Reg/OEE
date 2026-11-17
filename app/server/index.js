@@ -1473,9 +1473,88 @@ app.delete('/api/lineas/archivadas/:id', async (req, reply) => {
   if (!soloAdmin(req, reply)) return;
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) return reply.code(400).send({ error: 'archivo inválido' });
-  const r = await q('delete from lineas_archivadas where id = $1 returning linea_id', [id]);
-  if (!r.rowCount) return reply.code(404).send({ error: 'ya no está' });
-  return { ok: true };
+  const client = await pool.connect();
+  try {
+    await client.query('begin');
+    const a = await client.query('delete from lineas_archivadas where id = $1 returning linea_id', [id]);
+    if (!a.rowCount) { await client.query('rollback'); return reply.code(404).send({ error: 'ya no está' }); }
+    // sus paradas dejan de contar en los análisis (se anulan, no se borran)
+    const p2 = await client.query(`
+      update registro_paradas set estado = 'anulada',
+             motivo_anulacion = coalesce(motivo_anulacion, 'línea archivada eliminada')
+       where linea_id = $1 and estado <> 'anulada'`, [a.rows[0].linea_id]);
+    await client.query('commit');
+    return { ok: true, paradas: p2.rowCount };
+  } catch (e) {
+    await client.query('rollback');
+    return reply.code(400).send({ error: e.message });
+  } finally {
+    client.release();
+  }
+});
+
+// ---- las fallas de una línea, para la línea de tiempo del tablero ----
+app.get('/api/lineas/:id/paradas', async (req) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return { paradas: [] };
+  const r = await q(`
+    select p.id, p.maquina_id, m.nombre_corto as maquina,
+           p.codigo_causa_id, c.descripcion as causa, c.es_planificada,
+           p.hora_inicio, p.hora_fin, p.estado, p.comentarios_operador,
+           round(extract(epoch from (coalesce(p.hora_fin, now()) - p.hora_inicio)) / 60)::int as minutos
+      from registro_paradas p
+      join maquinas m on m.id = p.maquina_id
+      left join codigos_causa c on c.id = p.codigo_causa_id
+     where p.estado <> 'anulada'
+       and (p.linea_id = $1
+            or (p.linea_id is null and p.maquina_id in (select maquina_id from linea_maquinas where linea_id = $1)))
+     order by p.hora_inicio desc
+     limit 60`, [id]);
+  return { paradas: r.rows };
+});
+
+// corregir una parada cargada por error (hora o causa)
+app.patch('/api/paradas/:id', async (req, reply) => {
+  const id = Number(req.params.id);
+  const b = req.body || {};
+  try {
+    const act = await q('select * from registro_paradas where id = $1', [id]);
+    if (!act.rowCount) return reply.code(404).send({ error: 'esa parada no existe' });
+    const p = act.rows[0];
+    const inicio = b.hora_inicio ? new Date(b.hora_inicio) : new Date(p.hora_inicio);
+    const fin = b.hora_fin === null ? null : (b.hora_fin ? new Date(b.hora_fin) : p.hora_fin);
+    if (Number.isNaN(inicio.getTime())) return reply.code(400).send({ error: 'hora de inicio inválida' });
+    if (fin && Number.isNaN(new Date(fin).getTime())) return reply.code(400).send({ error: 'hora de fin inválida' });
+    if (fin && new Date(fin) < inicio) return reply.code(400).send({ error: 'el fin no puede ser anterior al inicio' });
+    // una parada de segundos queda con el mismo minuto: se estira a un minuto
+    const finAjustado = fin && new Date(fin) <= inicio
+      ? new Date(inicio.getTime() + 60000)
+      : fin;
+    const causa = b.codigo_causa_id ? Number(b.codigo_causa_id) : p.codigo_causa_id;
+    const r = await q(`update registro_paradas
+                          set hora_inicio = $2, hora_fin = $3, codigo_causa_id = $4,
+                              comentarios_operador = coalesce($5, comentarios_operador)
+                        where id = $1 returning id`, [id, inicio.toISOString(), finAjustado ? new Date(finAjustado).toISOString() : null, causa, texto(b.comentario, 300)]);
+    return { ok: true, id: r.rows[0].id };
+  } catch (e) {
+    return reply.code(400).send({ error: e.message });
+  }
+});
+
+// anular una parada cargada por error: deja de contar en los análisis
+app.post('/api/paradas/:id/anular', async (req, reply) => {
+  const id = Number(req.params.id);
+  try {
+    const r = await q(`update registro_paradas
+                          set estado = 'anulada',
+                              motivo_anulacion = coalesce($2, 'cargada por error')
+                        where id = $1 and estado <> 'anulada' returning id`,
+      [id, texto((req.body || {}).motivo, 120)]);
+    if (!r.rowCount) return reply.code(404).send({ error: 'ya estaba anulada' });
+    return { ok: true };
+  } catch (e) {
+    return reply.code(400).send({ error: e.message });
+  }
 });
 
 // Reactivar: se marca y el tablero la vuelve a armar (la línea mantiene su trama)
