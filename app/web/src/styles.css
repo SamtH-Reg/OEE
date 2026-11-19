@@ -1697,3 +1697,23 @@ header{padding-top:env(safe-area-inset-top, 0px)}
   font:600 13px inherit;padding:0 8px;max-width:230px
 }
 @media (pointer:coarse){ .lp-turno{height:44px;font-size:14px;max-width:100%} }
+
+/* ---- linea de tiempo del proceso (Gantt por equipo) ---- */
+.lp-gantt{margin-top:10px;overflow-x:auto}
+.lp-eje,.lp-fila{display:flex;align-items:center;gap:10px;min-width:520px}
+.lp-eje-nombre,.lp-nombre{flex:0 0 132px}
+.lp-eje-track,.lp-track{position:relative;flex:1;height:26px}
+.lp-eje-track{height:16px}
+.lp-marca{position:absolute;top:0;transform:translateX(-50%);font-size:11px;color:var(--dim);white-space:nowrap}
+.lp-fila .lp-track{background:#EEF2F6;border-radius:6px;overflow:hidden}
+.lp-base{position:absolute;top:0;bottom:0;background:#CFE9DA}
+.lp-bloque{position:absolute;top:3px;bottom:3px;min-width:4px;border:0;padding:0;border-radius:4px;background:#D64545;cursor:pointer;box-shadow:0 0 0 1px rgba(255,255,255,.6)}
+.lp-bloque:hover{filter:brightness(1.12)}
+.lp-rojo{color:#C0392B}
+.lp-nombre{font-size:12.5px;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media (pointer:coarse){
+  .lp-eje-nombre,.lp-nombre{flex:0 0 118px;font-size:13px}
+  .lp-eje-track,.lp-track{height:34px}
+  .lp-eje-track{height:18px}
+  .lp-bloque{top:5px;bottom:5px;min-width:8px}
+}

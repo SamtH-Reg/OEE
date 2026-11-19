@@ -1543,9 +1543,18 @@ app.get('/api/lineas/:id/paradas', async (req) => {
        and (p.linea_id = $1
             or (p.linea_id is null and p.maquina_id in (select maquina_id from linea_maquinas where linea_id = $1)))
        ${filtroTurno}
-     order by p.hora_inicio desc
-     limit 80`, params);
-  return { paradas: r.rows };
+     order by p.hora_inicio asc
+     limit 200`, params);
+
+  // ventana del proceso de la línea en ese turno (desde que arrancó el armado)
+  const win = await q(`
+    select min(tp.desde) as desde,
+           max(coalesce(tp.hasta, now())) as hasta
+      from turno_procesos tp
+     where tp.turno_id = coalesce($2::int, fn_turno_para(now()))
+       and exists (select 1 from jsonb_array_elements(tp.lineas) e
+                    where (e->>'linea_id')::int = $1)`, [id, Number.isInteger(turno) ? turno : null]);
+  return { paradas: r.rows, proceso: win.rows[0] || null };
 });
 
 // corregir una parada cargada por error (hora o causa)
