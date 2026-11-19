@@ -18,12 +18,13 @@ const fmtMin = (m) => {
   return `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, '0')}`;
 };
 
-export default function LineaParadas({ lineaId, causas = [], onCambio }) {
+export default function LineaParadas({ lineaId, causas = [], maquinas = [], onCambio }) {
   const [paradas, setParadas] = useState([]);
   const [proceso, setProceso] = useState(null);
   const [turnos, setTurnos] = useState([]);
   const [turno, setTurno] = useState(null);
   const [edit, setEdit] = useState(null);
+  const [nueva, setNueva] = useState(null);   // alta manual de una parada que ya pasó
   const [error, setError] = useState(null);
   const [cargando, setCargando] = useState(false);
 
@@ -121,6 +122,32 @@ export default function LineaParadas({ lineaId, causas = [], onCambio }) {
     } catch (e) { setError(e.message); }
   }
 
+  function abrirNueva() {
+    const ahora = new Date();
+    const desde = new Date(ahora.getTime() - 15 * 60000);
+    setError(null);
+    setNueva({
+      maquina_id: maquinas[0]?.maquina_id || maquinas[0]?.id || '',
+      codigo_causa_id: causas[0]?.id || '', desde: aInput(desde), hasta: aInput(ahora), comentario: ''
+    });
+  }
+
+  async function crear() {
+    try {
+      await api.crearParada({
+        maquina_id: Number(nueva.maquina_id),
+        codigo_causa_id: nueva.codigo_causa_id ? Number(nueva.codigo_causa_id) : null,
+        hora_inicio: new Date(nueva.desde).toISOString(),
+        hora_fin: nueva.hasta ? new Date(nueva.hasta).toISOString() : null,
+        linea_id: lineaId,
+        turno_id: turno,
+        comentario: nueva.comentario
+      });
+      setNueva(null); setError(null);
+      await cargar(turno); cargarTurnos(); onCambio && onCambio();
+    } catch (e) { setError(e.message); }
+  }
+
   async function anular(p) {
     try {
       await api.anularParada(p.id, 'cargada por error');
@@ -147,6 +174,7 @@ export default function LineaParadas({ lineaId, causas = [], onCambio }) {
           {hhmm(ventana.desde)}–{proceso?.hasta ? hhmm(ventana.hasta) : 'ahora'} ·
           {' '}{fmtMin(minutosProceso)} de proceso · <b className="lp-rojo">{fmtMin(totalParado)}</b> detenido
         </span>
+        <button className="lp-add" onClick={abrirNueva} title="Agregar una parada que ya pasó">＋ Agregar parada</button>
         <button className="lp-ref" onClick={() => { cargarTurnos(); cargar(turno); }}
                 title="Actualizar" disabled={cargando}>⟳</button>
       </div>
@@ -206,6 +234,43 @@ export default function LineaParadas({ lineaId, causas = [], onCambio }) {
           </p>
         )}
       </div>
+
+      {nueva && (
+        <div className="confirma-capa" onClick={() => setNueva(null)}>
+          <div className="confirma" onClick={e => e.stopPropagation()}>
+            <h3>Agregar parada</h3>
+            <p>Para lo que el operador avisa después: elegí el equipo y la hora en que estuvo parado.</p>
+            <label className="an-campo">Equipo
+              <select value={nueva.maquina_id} onChange={e => setNueva({ ...nueva, maquina_id: e.target.value })}>
+                {maquinas.map(m => (
+                  <option key={m.maquina_id || m.id} value={m.maquina_id || m.id}>{m.nombre_corto || m.nombre}</option>
+                ))}
+              </select>
+            </label>
+            <label className="an-campo">Causa
+              <select value={nueva.codigo_causa_id} onChange={e => setNueva({ ...nueva, codigo_causa_id: e.target.value })}>
+                {causas.map(c => <option key={c.id} value={c.id}>{c.descripcion}</option>)}
+              </select>
+            </label>
+            <label className="an-campo">Desde
+              <input type="datetime-local" value={nueva.desde}
+                     onChange={e => setNueva({ ...nueva, desde: e.target.value })} />
+            </label>
+            <label className="an-campo">Hasta <em>(vacío = sigue parada)</em>
+              <input type="datetime-local" value={nueva.hasta}
+                     onChange={e => setNueva({ ...nueva, hasta: e.target.value })} />
+            </label>
+            <label className="an-campo">Comentario <em>(opcional)</em>
+              <input value={nueva.comentario} onChange={e => setNueva({ ...nueva, comentario: e.target.value })} />
+            </label>
+            {error && <p className="err">{error}</p>}
+            <div className="confirma-acciones">
+              <button className="ghost" onClick={() => setNueva(null)}>Cancelar</button>
+              <button className="btn-go small" onClick={crear}>Agregar</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {edit && (
         <div className="confirma-capa" onClick={() => setEdit(null)}>

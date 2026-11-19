@@ -1510,7 +1510,7 @@ app.get('/api/lineas/:id/turnos', async (req) => {
       join turnos t on t.id = p.turno_id
      where p.estado <> 'anulada'
        and (p.linea_id = $1
-            or (p.linea_id is null and p.maquina_id in (select maquina_id from linea_maquinas where linea_id = $1)))
+            or p.maquina_id in (select maquina_id from linea_maquinas where linea_id = $1))
      group by t.id, t.fecha, t.nombre, t.cerrado
      order by t.fecha desc, t.id desc
      limit 40`, [id]);
@@ -1541,7 +1541,7 @@ app.get('/api/lineas/:id/paradas', async (req) => {
       left join codigos_causa c on c.id = p.codigo_causa_id
      where p.estado <> 'anulada'
        and (p.linea_id = $1
-            or (p.linea_id is null and p.maquina_id in (select maquina_id from linea_maquinas where linea_id = $1)))
+            or p.maquina_id in (select maquina_id from linea_maquinas where linea_id = $1))
        ${filtroTurno}
      order by p.hora_inicio asc
      limit 200`, params);
@@ -1555,6 +1555,45 @@ app.get('/api/lineas/:id/paradas', async (req) => {
        and exists (select 1 from jsonb_array_elements(tp.lineas) e
                     where (e->>'linea_id')::int = $1)`, [id, Number.isInteger(turno) ? turno : null]);
   return { paradas: r.rows, proceso: win.rows[0] || null };
+});
+
+// cargar a mano una parada que pasó y no se registró (la informa el operador)
+app.post('/api/paradas/manual', async (req, reply) => {
+  const b = req.body || {};
+  try {
+    const maquina = Number(b.maquina_id);
+    if (!Number.isInteger(maquina)) return reply.code(400).send({ error: 'elegí el equipo' });
+    if (!b.codigo_causa_id) return reply.code(400).send({ error: 'elegí la causa de la parada' });
+    const inicio = b.hora_inicio ? new Date(b.hora_inicio) : null;
+    const fin = b.hora_fin ? new Date(b.hora_fin) : null;
+    if (!inicio || Number.isNaN(inicio.getTime())) return reply.code(400).send({ error: 'hora de inicio inválida' });
+    if (fin && Number.isNaN(fin.getTime())) return reply.code(400).send({ error: 'hora de fin inválida' });
+    if (fin && fin < inicio) return reply.code(400).send({ error: 'el fin no puede ser anterior al inicio' });
+    const finOk = fin && fin <= inicio ? new Date(inicio.getTime() + 60000) : fin;
+
+    let turnoId = b.turno_id ? Number(b.turno_id) : null;
+    if (!turnoId) {
+      const t = await q('select fn_turno_para(now()) as id');
+      turnoId = t.rows[0]?.id || null;
+    }
+    let linea = b.linea_id ? Number(b.linea_id) : null;
+    if (!linea) {
+      const l = await q('select linea_id from linea_maquinas where maquina_id = $1 order by linea_id limit 1', [maquina]);
+      linea = l.rows[0]?.linea_id || null;
+    }
+
+    const r = await q(`insert into registro_paradas
+        (maquina_id, codigo_causa_id, turno_id, hora_inicio, hora_fin, estado, linea_id,
+         origen, impacto, alcance, comentarios_operador, creado_por)
+      values ($1, $2, $3, $4, $5, $6, $7, 'web', 'Total', 'maquina', $8, $9)
+      returning id`,
+      [maquina, b.codigo_causa_id ? Number(b.codigo_causa_id) : null, turnoId,
+       inicio.toISOString(), finOk ? finOk.toISOString() : null,
+       finOk ? 'cerrada' : 'activa', linea, texto(b.comentario, 300), texto(req.usuario?.nombre, 80)]);
+    return { ok: true, id: r.rows[0].id };
+  } catch (e) {
+    return reply.code(400).send({ error: e.message });
+  }
 });
 
 // corregir una parada cargada por error (hora o causa)

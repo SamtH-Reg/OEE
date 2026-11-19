@@ -1717,3 +1717,16 @@ header{padding-top:env(safe-area-inset-top, 0px)}
   .lp-eje-track{height:18px}
   .lp-bloque{top:5px;bottom:5px;min-width:8px}
 }
+
+/* botón para abrir la línea de tiempo de paradas */
+.ln-timeline{
+  position:absolute;top:14px;right:164px;height:38px;padding:0 13px;border-radius:10px;
+  border:1px solid var(--line2);background:#fff;color:var(--ink);font:600 13px inherit;cursor:pointer
+}
+.ln-timeline:hover{background:#F4F6F8}
+.lp-add{
+  height:34px;padding:0 12px;border-radius:9px;border:0;background:#149553;color:#fff;
+  font:600 12.5px inherit;cursor:pointer
+}
+.lp-add:hover{filter:brightness(1.06)}
+@media (pointer:coarse){ .lp-add{height:44px;font-size:14px} .ln-timeline{height:44px} }

@@ -212,7 +212,8 @@ export default function App({ usuario, onSalir }) {
   const esAdmin = nivel >= 3;
 
   const [ajustes, setAjustes] = useState(false);        // true | 'archivados'
-  const [confirmarArchivo, setConfirmarArchivo] = useState(null);  // {id, nombre}
+  const [confirmarArchivo, setConfirmarArchivo] = useState(null);  // {id, nombre}
+  const [timeline, setTimeline] = useState(false);                 // panel de paradas
   const [confirmarRecarga, setConfirmarRecarga] = useState(false);
   const { tirando, listo } = usePullRefresh(90, () => setConfirmarRecarga(true));
   const [analisis, setAnalisis] = useState(false);
@@ -1957,6 +1958,10 @@ export default function App({ usuario, onSalir }) {
                   );
                 })()}
 
+                <button className="ln-timeline" onClick={() => setTimeline(true)}
+                        title="Línea de tiempo de paradas de esta línea">
+                  ⏱ Paradas
+                </button>
                 {puedeSupervisar && !turnoCerrado && (
                   <button className="ln-archivar" onClick={archivarLinea}
                           title="Cierra el proceso de esta línea y la saca del turno">
@@ -1999,8 +2004,6 @@ export default function App({ usuario, onSalir }) {
                   {Math.round(zoomFlujo * 100)}% · volver al 100%
                 </button>
               )}
-              <LineaParadas lineaId={lineaActual.linea_id} causas={cat?.causas || []}
-                            onCambio={() => { refrescar(); api.monitor().then(setMonitor).catch(() => {}); }} />
               <div className="flow split" ref={pinchFlujo}
                    style={{ zoom: zoomFlujo }}>
                 {columnasLinea.map((col, ci) => (
@@ -2603,6 +2606,26 @@ export default function App({ usuario, onSalir }) {
               <button className="ghost" onClick={() => setConfirmarRecarga(false)}>Cancelar</button>
               <button className="btn-go small" onClick={() => location.reload()}>Actualizar</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {timeline && lineaActual && (
+        <div className="sheet">
+          <div className="top">
+            <div>
+              <h3>Paradas · {lineaActual.nombre}</h3>
+              <div className="sub">
+                Tiempo de proceso en verde y cada detención en rojo. Tocá una marca para corregirla,
+                o agregá una parada que avisó el operador.
+              </div>
+            </div>
+            <button className="x" onClick={() => setTimeline(false)}>✕</button>
+          </div>
+          <div className="tf-body">
+            <LineaParadas lineaId={lineaActual.linea_id} causas={cat?.causas || []}
+                          maquinas={maquinasLinea}
+                          onCambio={() => { refrescar(); api.monitor().then(setMonitor).catch(() => {}); }} />
           </div>
         </div>
       )}
