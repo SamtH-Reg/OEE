@@ -1,8 +1,13 @@
 {
+  "id": "/",
   "name": "Paradas · Tablero de planta",
   "short_name": "Paradas",
   "start_url": "/",
-  "display": "fullscreen",
+  "display": "standalone",
+  "display_override": [
+    "standalone",
+    "fullscreen"
+  ],
   "orientation": "any",
   "background_color": "#EDF1F5",
   "theme_color": "#FFFFFF",

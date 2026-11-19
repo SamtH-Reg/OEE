@@ -3,7 +3,7 @@
 // instante) y caché como red de seguridad cuando no hay conexión.
 // La API no se cachea acá: los datos viven en IndexedDB y en la cola de paradas.
 
-const CACHE = 'tablero-v1';
+const CACHE = 'tablero-v2';
 const SHELL = ['/', '/index.html', '/manifest.webmanifest', '/icono.svg'];
 
 self.addEventListener('install', (e) => {
