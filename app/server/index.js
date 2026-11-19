@@ -1498,10 +1498,39 @@ app.delete('/api/lineas/archivadas/:id', async (req, reply) => {
   }
 });
 
+// Turnos que tienen paradas de esta línea: alimenta el selector de fecha
+app.get('/api/lineas/:id/turnos', async (req) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return { turnos: [] };
+  const r = await q(`
+    select t.id, t.fecha, t.nombre, t.cerrado,
+           count(p.id)::int as paradas,
+           coalesce(sum(round(extract(epoch from (coalesce(p.hora_fin, now()) - p.hora_inicio)) / 60)), 0)::int as minutos
+      from registro_paradas p
+      join turnos t on t.id = p.turno_id
+     where p.estado <> 'anulada'
+       and (p.linea_id = $1
+            or (p.linea_id is null and p.maquina_id in (select maquina_id from linea_maquinas where linea_id = $1)))
+     group by t.id, t.fecha, t.nombre, t.cerrado
+     order by t.fecha desc, t.id desc
+     limit 40`, [id]);
+  const hoy = await q('select id, fecha, nombre, cerrado from turnos where id = fn_turno_para(now())');
+  const lista = r.rows.slice();
+  if (hoy.rowCount && !lista.some(t => t.id === hoy.rows[0].id)) {
+    lista.unshift({ ...hoy.rows[0], paradas: 0, minutos: 0 });
+  }
+  return { turnos: lista, actual: hoy.rows[0]?.id || null };
+});
+
 // ---- las fallas de una línea, para la línea de tiempo del tablero ----
 app.get('/api/lineas/:id/paradas', async (req) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id)) return { paradas: [] };
+  const qs = req.query || {};
+  const turno = qs.turno ? Number(qs.turno) : null;
+  const params = [id];
+  let filtroTurno = 'and p.turno_id = fn_turno_para(now())';
+  if (Number.isInteger(turno)) { params.push(turno); filtroTurno = `and p.turno_id = $${params.length}`; }
   const r = await q(`
     select p.id, p.maquina_id, m.nombre_corto as maquina,
            p.codigo_causa_id, c.descripcion as causa, c.es_planificada,
@@ -1513,8 +1542,9 @@ app.get('/api/lineas/:id/paradas', async (req) => {
      where p.estado <> 'anulada'
        and (p.linea_id = $1
             or (p.linea_id is null and p.maquina_id in (select maquina_id from linea_maquinas where linea_id = $1)))
+       ${filtroTurno}
      order by p.hora_inicio desc
-     limit 60`, [id]);
+     limit 80`, params);
   return { paradas: r.rows };
 });
 

@@ -2,6 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from './api';
 
 const hhmm = (iso) => new Date(iso).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
+const fechaDia = (v) => {
+  if (!v) return '';
+  const d = /T/.test(String(v)) ? new Date(v) : new Date(`${v}T12:00:00`);
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('es-CL', { day: '2-digit', month: 'short' });
+};
 const aInput = (iso) => {
   const d = new Date(iso);
   const dos = (n) => String(n).padStart(2, '0');
@@ -21,19 +26,39 @@ const color = (p) => {
 
 export default function LineaParadas({ lineaId, causas = [], onCambio }) {
   const [paradas, setParadas] = useState([]);
+  const [turnos, setTurnos] = useState([]);
+  const [turno, setTurno] = useState(null);       // turno (día) que se está mirando
   const [edit, setEdit] = useState(null);
   const [error, setError] = useState(null);
   const [cargando, setCargando] = useState(false);
 
-  async function cargar() {
+  async function cargarTurnos() {
+    try {
+      const r = await api.turnosLinea(lineaId);
+      setTurnos(r.turnos || []);
+      setTurno(t => t ?? r.actual ?? r.turnos?.[0]?.id ?? null);
+    } catch { /* sin red */ }
+  }
+
+  async function cargar(idTurno) {
     setCargando(true);
     try {
-      const r = await api.paradasLinea(lineaId);
+      const r = await api.paradasLinea(lineaId, idTurno);
       setParadas(r.paradas || []);
     } catch { /* sin red */ }
     setCargando(false);
   }
-  useEffect(() => { cargar(); /* eslint-disable-next-line */ }, [lineaId]);
+
+  useEffect(() => {
+    setTurno(null); setParadas([]); setTurnos([]);
+    cargarTurnos();
+    /* eslint-disable-next-line */
+  }, [lineaId]);
+
+  useEffect(() => {
+    if (turno) cargar(turno);
+    /* eslint-disable-next-line */
+  }, [turno]);
 
   const total = paradas.reduce((s, p) => s + (p.minutos || 0), 0);
   const ventana = useMemo(() => {
@@ -45,19 +70,31 @@ export default function LineaParadas({ lineaId, causas = [], onCambio }) {
     return { desde, hasta, ancho: Math.max(1, hasta - desde) };
   }, [paradas]);
 
+  const elegido = turnos.find(t => t.id === turno) || null;
+
+  function abrirEdicion(p) {
+    setError(null);
+    setEdit({
+      id: p.id, causa: p.codigo_causa_id || '', comentario: p.comentarios_operador || '',
+      desde: aInput(p.hora_inicio), hasta: p.hora_fin ? aInput(p.hora_fin) : '',
+      hora_inicio: p.hora_inicio, hora_fin: p.hora_fin
+    });
+  }
+
   async function guardar() {
     try {
       const orig = paradas.find(x => x.id === edit.id) || {};
       await api.editarParada(edit.id, {
-        hora_inicio: edit.desde !== orig.desde ? new Date(edit.desde).toISOString() : orig.hora_inicio,
+        hora_inicio: edit.desde !== aInput(orig.hora_inicio) ? new Date(edit.desde).toISOString() : orig.hora_inicio,
         hora_fin: !edit.hasta
           ? null
-          : (edit.hasta !== orig.hasta ? new Date(edit.hasta).toISOString() : orig.hora_fin),
+          : (edit.hasta !== aInput(orig.hora_fin) ? new Date(edit.hasta).toISOString() : orig.hora_fin),
         codigo_causa_id: edit.causa ? Number(edit.causa) : null,
         comentario: edit.comentario
       });
       setEdit(null); setError(null);
-      await cargar();
+      await cargar(turno);
+      cargarTurnos();
       onCambio && onCambio();
     } catch (e) { setError(e.message); }
   }
@@ -65,7 +102,8 @@ export default function LineaParadas({ lineaId, causas = [], onCambio }) {
   async function anular(p) {
     try {
       await api.anularParada(p.id, 'cargada por error');
-      await cargar();
+      await cargar(turno);
+      cargarTurnos();
       onCambio && onCambio();
     } catch (e) { setError(e.message); }
   }
@@ -74,8 +112,17 @@ export default function LineaParadas({ lineaId, causas = [], onCambio }) {
     <section className="lp">
       <div className="lp-head">
         <b>Fallas de la línea</b>
+        <select className="lp-turno" value={turno ?? ''} onChange={e => setTurno(Number(e.target.value))}
+                title="Turno y fecha">
+          {turnos.map(t => (
+            <option key={t.id} value={t.id}>
+              {fechaDia(t.fecha)} · {t.paradas} {t.paradas === 1 ? 'parada' : 'paradas'} · {fmtMin(t.minutos)}
+            </option>
+          ))}
+          {!turnos.length && <option value="">sin turnos</option>}
+        </select>
         <span className="lp-dato">{paradas.length} {paradas.length === 1 ? 'parada' : 'paradas'} · {fmtMin(total)}</span>
-        <button className="lp-ref" onClick={cargar} title="Actualizar" disabled={cargando}>⟳</button>
+        <button className="lp-ref" onClick={() => { cargarTurnos(); cargar(turno); }} title="Actualizar" disabled={cargando}>⟳</button>
       </div>
 
       {ventana && (
@@ -86,12 +133,7 @@ export default function LineaParadas({ lineaId, causas = [], onCambio }) {
             const izq = ((ini - ventana.desde) / ventana.ancho) * 100;
             const ancho = Math.max(0.6, ((fin - ini) / ventana.ancho) * 100);
             return (
-              <button key={p.id} className="lp-seg" onClick={() => setEdit({
-                id: p.id, causa: p.codigo_causa_id || '', comentario: p.comentarios_operador || '',
-                desde: aInput(p.hora_inicio), hasta: p.hora_fin ? aInput(p.hora_fin) : '',
-                desdeOrig: aInput(p.hora_inicio), hastaOrig: p.hora_fin ? aInput(p.hora_fin) : '',
-                hora_inicio: p.hora_inicio, hora_fin: p.hora_fin
-              })}
+              <button key={p.id} className="lp-seg" onClick={() => abrirEdicion(p)}
                 style={{ left: `${izq}%`, width: `${ancho}%`, background: color(p) }}
                 title={`${hhmm(p.hora_inicio)} · ${p.maquina} · ${p.causa || 'sin causa'} · ${fmtMin(p.minutos)}`} />
             );
@@ -99,7 +141,11 @@ export default function LineaParadas({ lineaId, causas = [], onCambio }) {
         </div>
       )}
 
-      {!paradas.length && <p className="lp-vacio">Sin paradas registradas en esta línea.</p>}
+      {!paradas.length && (
+        <p className="lp-vacio">
+          Sin paradas en {elegido ? `el turno del ${fechaDia(elegido.fecha)}` : 'este turno'}.
+        </p>
+      )}
 
       <ul className="lp-list">
         {paradas.slice(0, 12).map(p => (
@@ -108,13 +154,8 @@ export default function LineaParadas({ lineaId, causas = [], onCambio }) {
             <span className="lp-maq">{p.maquina}</span>
             <span className="lp-causa" style={{ color: color(p) }}>{p.causa || 'sin causa'}</span>
             <span className="lp-dur">{fmtMin(p.minutos)}</span>
-            <button className="lp-btn" title="Corregir"
-                    onClick={() => setEdit({
-                      id: p.id, causa: p.codigo_causa_id || '', comentario: p.comentarios_operador || '',
-                      desde: aInput(p.hora_inicio), hasta: p.hora_fin ? aInput(p.hora_fin) : '',
-                      desdeOrig: aInput(p.hora_inicio), hastaOrig: p.hora_fin ? aInput(p.hora_fin) : '',
-                      hora_inicio: p.hora_inicio, hora_fin: p.hora_fin
-                    })}>✎</button>
+            <button className="lp-btn" title="Corregir hora o causa"
+                    onClick={() => abrirEdicion(p)}>✎</button>
             <button className="lp-btn peligro" title="Anular (no cuenta en los análisis)"
                     onClick={() => anular(p)}>✕</button>
           </li>

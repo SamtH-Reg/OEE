@@ -1690,3 +1690,10 @@ header{padding-top:env(safe-area-inset-top, 0px)}
   .lp-hora{flex:0 0 120px}
   .lp-maq{flex:0 0 130px}
 }
+
+/* selector de turno en la línea de tiempo */
+.lp-turno{
+  height:34px;border:1px solid var(--line2);border-radius:9px;background:#fff;color:var(--ink);
+  font:600 13px inherit;padding:0 8px;max-width:230px
+}
+@media (pointer:coarse){ .lp-turno{height:44px;font-size:14px;max-width:100%} }
